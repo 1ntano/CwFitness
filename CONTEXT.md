@@ -5,8 +5,12 @@ This context describes how a person defines recurring fitness plans, records com
 ## Language
 
 **User**:
-A registered person whose Workout Plans, Exercises, Workout Sessions, settings, and progress are private to that User.
+A registered person whose Workout Plans, Exercises, Workout Sessions, settings, and progress are private to that User. The User has a configurable time zone used when starting future sessions.
 _Avoid_: Account, athlete
+
+**User Deletion**:
+The irreversible removal of a User and all data they own, including plans, exercises, sessions, settings, drafts, and identifiers associated with telemetry.
+_Avoid_: Sign out, deactivate account
 
 **Workout Plan**:
 A user-owned, reusable weekly fitness plan whose progress is measured independently from the user's other plans.
@@ -41,7 +45,7 @@ Whether an Exercise target is measured by repetitions (Repetitions) or elapsed s
 _Avoid_: Measurement mode, set type
 
 **Workout Session**:
-A performance of a Workout Day whose targets are fixed when the session starts, so they cannot be edited during training and later plan edits cannot change its historical results. It cannot be backdated; if it crosses midnight, it belongs to its start date.
+A performance of a Workout Day whose targets, time zone, and local start date are fixed when the session starts, so they cannot be edited during training and later setting or plan edits cannot change its historical results. It cannot be backdated; if it crosses midnight, it belongs to its start date.
 _Avoid_: Workout, activity log
 
 **Added Exercise**:
