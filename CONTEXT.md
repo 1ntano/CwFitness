@@ -16,9 +16,21 @@ _Avoid_: Routine, program
 A named part of a Workout Plan containing the exercises intended for one training occasion. It may have a suggested weekday, while the user may perform it earlier or later.
 _Avoid_: Split, schedule
 
+**Exercise**:
+A named physical activity with a stable identity. Its latest name is used when displaying both current and historical results.
+_Avoid_: Movement, exercise name
+
 **Planned Exercise**:
-An exercise prescribed within a Workout Day, including its planned sets and targets such as repetitions, weight, or duration.
+A prescribed Exercise within a Workout Day, with one uniform target shared by all of its planned sets.
 _Avoid_: Movement template, task
+
+**Resistance Type**:
+Whether an Exercise is performed with external weight (Weighted) or without required external weight (Bodyweight).
+_Avoid_: Weight mode, load type
+
+**Target Type**:
+Whether an Exercise target is measured by repetitions (Repetitions) or elapsed seconds (Duration).
+_Avoid_: Measurement mode, set type
 
 **Workout Session**:
 A dated performance of a Workout Day whose targets are fixed when the session starts, so later plan edits cannot change its historical results.
@@ -33,7 +45,7 @@ A Planned Exercise intentionally removed from one Workout Session's targets with
 _Avoid_: Skipped exercise, deleted exercise
 
 **Skipped Set**:
-A planned set retained in a Workout Session but not performed; it contributes zero completed Training Volume.
+A planned set retained in a Workout Session but not performed; it contributes zero toward that Exercise's Achievement Rate.
 _Avoid_: Removed set, deleted set
 
 **In-progress Session**:
@@ -48,18 +60,14 @@ _Avoid_: Closed workout, saved workout
 A retained Workout Session the user chose not to finish; it does not contribute to progress statistics.
 _Avoid_: Deleted workout, failed workout
 
-**Training Volume**:
-The measurable amount of work for an exercise: repetitions multiplied by weight for weighted exercises, repetitions for unweighted exercises, or seconds for timed exercises.
-_Avoid_: Workload, effort
+**Exercise Achievement Rate**:
+How closely the actual result for one Exercise meets its prescribed target in a Workout Session, capped at 100%; skipped sets contribute zero.
+_Avoid_: Plan achievement rate, completion score
 
-**Achievement Rate**:
-The completed Training Volume divided by the planned Training Volume for a Workout Session, capped at 100%; skipped sets contribute zero.
-_Avoid_: Completion rate, compliance score
-
-**Excess Volume**:
-Completed Training Volume beyond the planned Training Volume, shown separately rather than increasing Achievement Rate above 100%.
-_Avoid_: Bonus completion, overachievement rate
+**Exercise Excess**:
+The amount by which one Exercise exceeds its prescribed target. It is shown separately from Exercise Achievement Rate and can support progression suggestions.
+_Avoid_: Excess volume, bonus completion
 
 **Plan Progress**:
-The dated history and trends derived only from Workout Sessions belonging to one Workout Plan.
+The dated, per-Exercise history and trends derived only from Workout Sessions belonging to one Workout Plan.
 _Avoid_: User progress, global statistics
