@@ -433,3 +433,78 @@ test('A Workout Day without Planned Exercises cannot start a Session', async () 
   assert.equal(active.status, 200);
   assert.equal((await active.json()).workoutSession, null);
 });
+
+test('Plan structure edits and deletes are isolated by owner', async () => {
+  const aliceCookie = await signUp('PlanStructureOwner');
+  const bobCookie = await signUp('PlanStructureOther');
+  const plan = await createPlan(aliceCookie, 'Owner Plan');
+  const exercise = await createExercise(aliceCookie, {
+    name: 'Owned Press', resistanceType: 'WEIGHTED', targetType: 'REPETITIONS',
+  });
+  const day = await createWorkoutDay(aliceCookie, plan.id, 'Owner Day');
+  const planned = await addPlannedExercise(aliceCookie, plan.id, day.id, {
+    exerciseId: exercise.id, setCount: 2, targetValue: 8, weight: 70, weightUnit: 'kg',
+  });
+
+  const forbiddenPlan = await request(`/api/plans/${plan.id}`, {
+    method: 'PATCH', headers: { cookie: bobCookie }, body: JSON.stringify({ name: 'Stolen Plan' }),
+  });
+  assert.equal(forbiddenPlan.status, 404);
+
+  const forbiddenDay = await request(`/api/plans/${plan.id}/days/${day.id}`, {
+    method: 'PATCH', headers: { cookie: bobCookie },
+    body: JSON.stringify({ name: 'Stolen Day', suggestedWeekday: 2 }),
+  });
+  assert.equal(forbiddenDay.status, 404);
+
+  const forbiddenPlanned = await request(`/api/plans/${plan.id}/days/${day.id}/exercises/${planned.id}`, {
+    method: 'PATCH', headers: { cookie: bobCookie },
+    body: JSON.stringify({ setCount: 9, targetValue: 1, weight: 1, weightUnit: 'kg' }),
+  });
+  assert.equal(forbiddenPlanned.status, 404);
+
+  const forbiddenPlannedDelete = await request(`/api/plans/${plan.id}/days/${day.id}/exercises/${planned.id}`, {
+    method: 'DELETE', headers: { cookie: bobCookie },
+  });
+  assert.equal(forbiddenPlannedDelete.status, 404);
+
+  const forbiddenDayDelete = await request(`/api/plans/${plan.id}/days/${day.id}`, {
+    method: 'DELETE', headers: { cookie: bobCookie },
+  });
+  assert.equal(forbiddenDayDelete.status, 404);
+
+  const bobPlans = await request('/api/plans', { headers: { cookie: bobCookie } });
+  assert.deepEqual(await bobPlans.json(), { plans: [] });
+
+  const alicePlans = await request('/api/plans', { headers: { cookie: aliceCookie } });
+  const [savedPlan] = (await alicePlans.json()).plans;
+  assert.equal(savedPlan.name, 'Owner Plan');
+  assert.equal(savedPlan.workoutDays[0].name, 'Owner Day');
+  assert.equal(savedPlan.workoutDays[0].plannedExercises[0].setCount, 2);
+});
+
+test('Permanent Exercise deletion is blocked by an In-progress Session', async () => {
+  const cookie = await signUp('ProtectedExerciseOwner');
+  const plan = await createPlan(cookie, 'Protected Exercise Plan');
+  const exercise = await createExercise(cookie, {
+    name: 'Protected Row', resistanceType: 'WEIGHTED', targetType: 'REPETITIONS',
+  });
+  const day = await createWorkoutDay(cookie, plan.id, 'Protected Day');
+  await addPlannedExercise(cookie, plan.id, day.id, {
+    exerciseId: exercise.id, setCount: 2, targetValue: 10, weight: 60, weightUnit: 'kg',
+  });
+
+  const started = await request('/api/workout-sessions', {
+    method: 'POST', headers: { cookie },
+    body: JSON.stringify({ workoutDayId: day.id, timeZone: 'Asia/Shanghai' }),
+  });
+  assert.equal(started.status, 201);
+
+  const blockedDelete = await request(`/api/exercises/${exercise.id}`, {
+    method: 'DELETE', headers: { cookie }, body: JSON.stringify({ confirmation: 'DELETE' }),
+  });
+  assert.equal(blockedDelete.status, 409);
+
+  const exercises = await request('/api/exercises', { headers: { cookie } });
+  assert.equal((await exercises.json()).exercises.some((item) => item.id === exercise.id), true);
+});
