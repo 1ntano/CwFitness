@@ -290,6 +290,7 @@ test('User starts one snapshotted Workout Session and completes its timed lifecy
   assert.equal(completedSession.status, 'COMPLETED');
   assert.equal(Number.isInteger(completedSession.trainingTimeSeconds), true);
   assert.equal(completedSession.trainingTimeSeconds >= 0, true);
+  assert.equal(completedSession.exercises[0].setResults.filter((result) => result.skipped).length, 4);
   const history = await request('/api/workout-sessions', { headers: { cookie } });
   assert.equal(history.status, 200);
   const [historySession] = (await history.json()).workoutSessions;

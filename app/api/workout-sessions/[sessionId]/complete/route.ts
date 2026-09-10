@@ -15,17 +15,35 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   const activeDurationMs = current.activeDurationMs + (current.status === "ACTIVE" ? confirmedActiveDurationMs(current.lastHeartbeatAt, completedAt) : 0);
   const trainingTimeSeconds = Math.max(0, Math.floor(activeDurationMs / 1000));
 
-  const scoredExercises = await prisma.sessionExercise.findMany({
+  const sessionExercises = await prisma.sessionExercise.findMany({
     where: { workoutSessionId: sessionId, removedAt: null },
     orderBy: { createdAt: "asc" },
     include: { exercise: { select: { name: true } }, setResults: true },
   });
-  if (scoredExercises.length === 0) {
+  if (sessionExercises.length === 0) {
     return Response.json(
       { error: "A Workout Session must contain at least one Exercise" },
       { status: 409 },
     );
   }
+  const missingSets = sessionExercises.flatMap((exercise) => {
+    const recorded = new Set(exercise.setResults.map((result) => result.setIndex));
+    return Array.from({ length: exercise.setCount }, (_, index) => index + 1)
+      .filter((setIndex) => !recorded.has(setIndex))
+      .map((setIndex) => ({ sessionExerciseId: exercise.id, setIndex }));
+  });
+  if (missingSets.length > 0) {
+    await prisma.$transaction(missingSets.map((set) => prisma.sessionSetResult.upsert({
+      where: { sessionExerciseId_setIndex: set },
+      create: { ...set, actualValue: null, actualWeightGrams: null, skipped: true },
+      update: { actualValue: null, actualWeightGrams: null, skipped: true },
+    })));
+  }
+  const scoredExercises = missingSets.length === 0 ? sessionExercises : await prisma.sessionExercise.findMany({
+    where: { workoutSessionId: sessionId, removedAt: null },
+    orderBy: { createdAt: "asc" },
+    include: { exercise: { select: { name: true } }, setResults: true },
+  });
   const exerciseResults = scoreExercises(scoredExercises);
 
   const workoutSession = await prisma.workoutSession.update({
