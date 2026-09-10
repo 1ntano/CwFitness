@@ -49,7 +49,7 @@ A performance of a Workout Day whose targets, time zone, and local start date ar
 _Avoid_: Workout, activity log
 
 **Added Exercise**:
-An exercise added while performing a Workout Session that was not originally part of the selected Workout Day. It must have complete targets before being added, after which those targets are locked; it may also be saved to the Workout Day for future sessions.
+An exercise added while performing a Workout Session that was not originally part of the selected Workout Day. It must have complete targets before being added, after which those targets are locked; it contributes to history but cannot earn a Progression Suggestion unless saved to the Workout Day.
 _Avoid_: Temporary exercise, ad hoc movement
 
 **Removed Exercise**:
@@ -76,6 +76,10 @@ _Avoid_: Elapsed time, session span
 A Workout Session the user has explicitly finished; it contributes to progress statistics using its actual completion date.
 _Avoid_: Closed workout, saved workout
 
+**Historical Correction**:
+A correction to the actual set results or skipped state of a Completed Session. It cannot change the session's exercises, targets, timing, date, or plan ownership.
+_Avoid_: Reopen session, edit plan history
+
 **Abandoned Session**:
 A retained Workout Session the user chose not to finish; it does not contribute to progress statistics.
 _Avoid_: Deleted workout, failed workout
@@ -89,7 +93,7 @@ The amount by which one Exercise exceeds its prescribed target. It is shown sepa
 _Avoid_: Excess volume, bonus completion
 
 **Permanent Exercise Deletion**:
-The irreversible removal of an Exercise from every Workout Plan and Workout Session, including all of its set results, trends, and Progression Suggestions; the surrounding sessions and their other exercises remain.
+The irreversible removal of an Exercise from every Workout Plan and Completed Session, including all of its set results, trends, and Progression Suggestions; the surrounding sessions and their other exercises remain. It is blocked while any In-progress Session contains that Exercise.
 _Avoid_: Archive exercise, remove from plan
 
 **Plan Progress**:
