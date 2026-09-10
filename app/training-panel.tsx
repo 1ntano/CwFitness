@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { weightFromGrams } from "../lib/weights";
 import type { Exercise, SessionExercise, SetResult, WorkoutSession } from "./workout-types";
 
 type SetInput = {
@@ -19,6 +20,7 @@ type TrainingPanelProps = {
   session: WorkoutSession;
   exercises: Exercise[];
   busy: boolean;
+  weightUnit: "kg" | "lb";
   onRecordSet: (exercise: SessionExercise, setIndex: number, input: SetInput | null) => Promise<void>;
   onAddExercise: (input: AddedExerciseInput) => Promise<void>;
   onRemoveExercise: (exercise: SessionExercise) => Promise<void>;
@@ -28,23 +30,23 @@ type TrainingPanelProps = {
   onAbandon: () => Promise<void>;
 };
 
-function targetText(exercise: SessionExercise) {
+function targetText(exercise: SessionExercise, weightUnit: "kg" | "lb") {
   const metric = exercise.targetType === "REPETITIONS" ? `${exercise.targetValue} 次` : `${exercise.targetValue} 秒`;
   const weight = exercise.resistanceType === "WEIGHTED" && exercise.weightGrams !== null
-    ? ` · ${(exercise.weightGrams / 1000).toFixed(1)} kg`
+    ? ` · ${weightFromGrams(exercise.weightGrams, weightUnit).toFixed(1)} ${weightUnit}`
     : "";
   return metric + weight;
 }
 
-function resultText(exercise: SessionExercise, result: SetResult | undefined) {
+function resultText(exercise: SessionExercise, result: SetResult | undefined, weightUnit: "kg" | "lb") {
   if (!result) return "未记录";
   if (result.skipped) return "已跳过";
   const metric = exercise.targetType === "REPETITIONS" ? `${result.actualValue ?? 0} 次` : `${result.actualValue ?? 0} 秒`;
-  const weight = result.actualWeightGrams === null ? "" : ` · ${(result.actualWeightGrams / 1000).toFixed(1)} kg`;
+  const weight = result.actualWeightGrams === null ? "" : ` · ${weightFromGrams(result.actualWeightGrams, weightUnit).toFixed(1)} ${weightUnit}`;
   return metric + weight;
 }
 
-export function TrainingPanel({ session, exercises: availableExercises, busy, onRecordSet, onAddExercise, onRemoveExercise, onPause, onResume, onComplete, onAbandon }: TrainingPanelProps) {
+export function TrainingPanel({ session, exercises: availableExercises, busy, weightUnit, onRecordSet, onAddExercise, onRemoveExercise, onPause, onResume, onComplete, onAbandon }: TrainingPanelProps) {
   const exercises = session.exercises.filter((exercise) => exercise.removedAt === null);
   const plannedSetCount = exercises.reduce((total, exercise) => total + exercise.setCount, 0);
   const recordedSetCount = exercises.reduce((total, exercise) => total + exercise.setResults.length, 0);
@@ -98,7 +100,7 @@ export function TrainingPanel({ session, exercises: availableExercises, busy, on
         <label><span>追加动作</span><select name="exerciseId" required value={selectedExerciseId} onChange={(event) => setSelectedExerciseId(event.target.value)} disabled={busy || isPaused}><option value="">选择动作</option>{availableExercises.map((exercise) => <option key={exercise.id} value={exercise.id}>{exercise.name}</option>)}</select></label>
         <label><span>组数</span><input name="setCount" type="number" min={1} defaultValue={3} required disabled={busy || isPaused} /></label>
         <label><span>{selectedExercise?.targetType === "DURATION" ? "目标秒数" : "目标次数"}</span><input name="targetValue" type="number" min={1} defaultValue={selectedExercise?.targetType === "DURATION" ? 30 : 8} required disabled={busy || isPaused} /></label>
-        {selectedExercise?.resistanceType === "WEIGHTED" && <label><span>目标重量（kg）</span><input name="weight" type="number" min={0.1} step={0.1} required disabled={busy || isPaused} /></label>}
+        {selectedExercise?.resistanceType === "WEIGHTED" && <label><span>目标重量（{weightUnit}）</span><input name="weight" type="number" min={0.1} step={0.1} required disabled={busy || isPaused} /></label>}
         <button className="action-button" type="submit" disabled={busy || isPaused}>追加动作</button>
       </form>
 
@@ -110,7 +112,7 @@ export function TrainingPanel({ session, exercises: availableExercises, busy, on
               <header>
                 <div>
                   <h2>{exercise.exerciseName}</h2>
-                  <p>目标：{targetText(exercise)} · {exercise.setCount} 组</p>
+                  <p>目标：{targetText(exercise, weightUnit)} · {exercise.setCount} 组</p>
                 </div>
                 <div className="training-exercise-actions">
                   {exercise.source === "ADDED" && <span className="tag">训练中追加</span>}
@@ -131,8 +133,8 @@ export function TrainingPanel({ session, exercises: availableExercises, busy, on
                     }}>
                       <span className="set-number">第 {setIndex} 组</span>
                       <label className="set-input"><span>{exercise.targetType === "REPETITIONS" ? "实际次数" : "实际秒数"}</span><input name="actualValue" type="number" min={0} defaultValue={result?.actualValue ?? exercise.targetValue} required disabled={busy || isPaused} /></label>
-                      {exercise.resistanceType === "WEIGHTED" && <label className="set-input"><span>实际重量（kg）</span><input name="actualWeight" type="number" min={0.1} step={0.1} defaultValue={result?.actualWeightGrams === null || result?.actualWeightGrams === undefined ? (exercise.weightGrams ?? 0) / 1000 : result.actualWeightGrams / 1000} required disabled={busy || isPaused} /></label>}
-                      <span className="set-result">{resultText(exercise, result)}</span>
+                      {exercise.resistanceType === "WEIGHTED" && <label className="set-input"><span>实际重量（{weightUnit}）</span><input name="actualWeight" type="number" min={0.1} step={0.1} defaultValue={weightFromGrams(result?.actualWeightGrams ?? exercise.weightGrams ?? 0, weightUnit).toFixed(1)} required disabled={busy || isPaused} /></label>}
+                      <span className="set-result">{resultText(exercise, result, weightUnit)}</span>
                       <button className="action-button compact" type="submit" disabled={busy || isPaused}>{result ? "更新记录" : "记录完成"}</button>
                       <button className="action-button compact quiet" type="button" disabled={busy || isPaused} onClick={() => onRecordSet(exercise, setIndex, null)}>
                         跳过

@@ -61,6 +61,23 @@ test('Workout Plans are isolated by the authenticated User', async () => {
   assert.deepEqual(await bobPlans.json(), { plans: [] });
 });
 
+test('User settings persist the preferred weight unit and pounds are stored as grams', async () => {
+  const cookie = await signUp('ImperialUser');
+  const settings = await request('/api/settings', {
+    method: 'PATCH', headers: { cookie }, body: JSON.stringify({ timeZone: 'America/New_York', weightUnit: 'lb' }),
+  });
+  assert.equal(settings.status, 200);
+  assert.deepEqual((await settings.json()).settings, { timeZone: 'America/New_York', weightUnit: 'lb' });
+
+  const plan = await createPlan(cookie, 'Imperial Plan');
+  const day = await createWorkoutDay(cookie, plan.id, 'Imperial Day');
+  const exercise = await createExercise(cookie, { name: 'Imperial Press', resistanceType: 'WEIGHTED', targetType: 'REPETITIONS' });
+  const planned = await addPlannedExercise(cookie, plan.id, day.id, {
+    exerciseId: exercise.id, setCount: 3, targetValue: 8, weight: 135, weightUnit: 'lb',
+  });
+  assert.equal(planned.weightGrams, 61_235);
+});
+
 async function createPlan(cookie, name) {
   const response = await request('/api/plans', {
     method: 'POST',

@@ -244,7 +244,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
       : {
           actualValue: input.actualValue,
           ...(exercise.resistanceType === "WEIGHTED"
-            ? { actualWeight: input.actualWeight, weightUnit: "kg" }
+            ? { actualWeight: input.actualWeight, weightUnit: settings.weightUnit }
             : {}),
         };
     await runMutation(
@@ -265,7 +265,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
     await runMutation(
       () => apiRequest(`/api/workout-sessions/${session.id}/exercises`, {
         method: "POST",
-        body: JSON.stringify({ ...input, ...(input.weight === undefined ? {} : { weightUnit: "kg" }) }),
+        body: JSON.stringify({ ...input, ...(input.weight === undefined ? {} : { weightUnit: settings.weightUnit }) }),
       }),
       "动作已追加到本次训练。",
     );
@@ -314,7 +314,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
   }
 
   async function correctHistoricalSet(session: WorkoutHistorySession, exercise: WorkoutSession["exercises"][number], setIndex: number, input: { actualValue: number; actualWeight?: number } | null) {
-    const payload = input === null ? { skipped: true } : { actualValue: input.actualValue, ...(exercise.resistanceType === "WEIGHTED" ? { actualWeight: input.actualWeight, weightUnit: "kg" } : {}) };
+    const payload = input === null ? { skipped: true } : { actualValue: input.actualValue, ...(exercise.resistanceType === "WEIGHTED" ? { actualWeight: input.actualWeight, weightUnit: settings.weightUnit } : {}) };
     await runMutation(
       () => apiRequest(`/api/workout-sessions/${session.id}/exercises/${exercise.id}/sets/${setIndex}`, { method: "PUT", body: JSON.stringify(payload) }),
       `第 ${setIndex} 组历史记录已修正。`,
@@ -405,6 +405,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
                   selectedPlanId={selectedPlanId}
                   busy={busy}
                   progress={progress}
+                  weightUnit={settings.weightUnit}
                   onSelectPlan={setSelectedPlanId}
                   onCreatePlan={createPlan}
                   onRenamePlan={renamePlan}
@@ -429,7 +430,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
                 />
               )}
 
-              {view === "history" && <WorkoutHistory workoutSessions={workoutSessions} busy={busy} onCorrectSet={correctHistoricalSet} />}
+              {view === "history" && <WorkoutHistory workoutSessions={workoutSessions} busy={busy} weightUnit={settings.weightUnit} onCorrectSet={correctHistoricalSet} />}
               {view === "settings" && <SettingsPanel settings={settings} busy={busy} onSave={saveSettings} onDelete={deleteAccount} />}
 
               {view === "training" && session && (
@@ -437,6 +438,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
                   session={session}
                   exercises={exercises}
                   busy={busy}
+                  weightUnit={settings.weightUnit}
                   onRecordSet={recordSet}
                   onAddExercise={addSessionExercise}
                   onRemoveExercise={removeSessionExercise}

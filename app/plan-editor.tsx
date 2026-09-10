@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { weightFromGrams } from "../lib/weights";
 import type { Exercise, ExerciseProgress, Plan, PlannedExercise, WorkoutDay } from "./workout-types";
 
 export type PlannedExerciseInput = {
@@ -17,6 +18,7 @@ type PlanEditorProps = {
   selectedPlanId: string;
   busy: boolean;
   progress: ExerciseProgress[];
+  weightUnit: "kg" | "lb";
   onSelectPlan: (planId: string) => void;
   onCreatePlan: (name: string) => Promise<void>;
   onRenamePlan: (plan: Plan, name: string) => Promise<void>;
@@ -36,9 +38,9 @@ function targetLabel(targetValue: number, targetType: Exercise["targetType"]) {
   return targetType === "REPETITIONS" ? `${targetValue} 次` : `${targetValue} 秒`;
 }
 
-function plannedTarget(planned: PlannedExercise) {
+function plannedTarget(planned: PlannedExercise, weightUnit: "kg" | "lb") {
   const weight = planned.exercise.resistanceType === "WEIGHTED" && planned.weightGrams !== null
-    ? ` · ${(planned.weightGrams / 1000).toFixed(1)} kg`
+    ? ` · ${weightFromGrams(planned.weightGrams, weightUnit).toFixed(1)} ${weightUnit}`
     : "";
   return `${planned.setCount} 组 × ${targetLabel(planned.targetValue, planned.exercise.targetType)}${weight}`;
 }
@@ -50,6 +52,7 @@ export function PlanEditor(props: PlanEditorProps) {
     selectedPlanId,
     busy,
     progress,
+    weightUnit,
     onSelectPlan,
     onCreatePlan,
     onRenamePlan,
@@ -97,7 +100,7 @@ export function PlanEditor(props: PlanEditorProps) {
       setCount: Number(data.get("setCount")),
       targetValue: Number(data.get("targetValue")),
       weight: weightValue ? Number(weightValue) : undefined,
-      weightUnit: weightValue ? "kg" : undefined,
+      weightUnit: weightValue ? weightUnit : undefined,
     });
     form.reset();
   }
@@ -255,7 +258,7 @@ export function PlanEditor(props: PlanEditorProps) {
                           <input name="targetValue" type="number" min={1} defaultValue={8} required />
                         </label>
                         <label>
-                          <span>重量 kg（仅负重动作）</span>
+                          <span>重量 {weightUnit}（仅负重动作）</span>
                           <input name="weight" type="number" min={0.1} step={0.1} placeholder="可选" />
                         </label>
                         <button className="action-button primary" type="submit" disabled={busy || exercises.length === 0}>添加动作</button>
@@ -268,7 +271,7 @@ export function PlanEditor(props: PlanEditorProps) {
                           <article className="planned-row" key={planned.id}>
                             <div className="row-copy">
                               <h4>{planned.exercise.name}</h4>
-                              <p>{plannedTarget(planned)}</p>
+                              <p>{plannedTarget(planned, weightUnit)}</p>
                               {progressFor(planned) && <p className="progress-copy">近 {progressFor(planned)?.recent.length} 次：{progressFor(planned)?.recent.map((item) => `${item.achievementRate}%`).join(" · ")}{progressFor(planned)?.progressionSuggestion ? ` · 已连续达标，建议${progressFor(planned)?.recent.some((item) => item.excessWeightGrams > 0) ? "增加重量" : planned.exercise.targetType === "DURATION" ? "增加秒数" : "增加次数"}` : ""}</p>}
                             </div>
                             <div className="row-actions">
@@ -282,7 +285,7 @@ export function PlanEditor(props: PlanEditorProps) {
                                     setCount: Number(data.get("setCount")),
                                     targetValue: Number(data.get("targetValue")),
                                     weight: weightValue ? Number(weightValue) : undefined,
-                                    weightUnit: weightValue ? "kg" : undefined,
+                                    weightUnit: weightValue ? weightUnit : undefined,
                                   });
                                 }}>
                                   <label>
@@ -294,8 +297,8 @@ export function PlanEditor(props: PlanEditorProps) {
                                     <input name="targetValue" type="number" min={1} defaultValue={planned.targetValue} required />
                                   </label>
                                   <label>
-                                    <span>重量 kg</span>
-                                    <input name="weight" type="number" min={0.1} step={0.1} defaultValue={planned.weightGrams === null ? "" : planned.weightGrams / 1000} />
+                                    <span>重量 {weightUnit}</span>
+                                    <input name="weight" type="number" min={0.1} step={0.1} defaultValue={planned.weightGrams === null ? "" : weightFromGrams(planned.weightGrams, weightUnit).toFixed(1)} />
                                   </label>
                                   <button className="action-button" type="submit" disabled={busy}>保存目标</button>
                                 </form>
