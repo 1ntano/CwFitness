@@ -217,14 +217,14 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
     }
   }
 
-  async function recordSet(exercise: WorkoutSession["exercises"][number], setIndex: number, skipped: boolean) {
+  async function recordSet(exercise: WorkoutSession["exercises"][number], setIndex: number, input: { actualValue: number; actualWeight?: number } | null) {
     if (!session) return;
-    const payload = skipped
+    const payload = input === null
       ? { skipped: true }
       : {
-          actualValue: exercise.targetValue,
+          actualValue: input.actualValue,
           ...(exercise.resistanceType === "WEIGHTED"
-            ? { actualWeight: (exercise.weightGrams ?? 0) / 1000, weightUnit: "kg" }
+            ? { actualWeight: input.actualWeight, weightUnit: "kg" }
             : {}),
         };
     await runMutation(
@@ -232,7 +232,26 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
         method: "PUT",
         body: JSON.stringify(payload),
       }),
-      skipped ? `第 ${setIndex} 组已跳过。` : `第 ${setIndex} 组已记录。`,
+      input === null ? `第 ${setIndex} 组已跳过。` : `第 ${setIndex} 组已记录。`,
+    );
+  }
+
+  async function addSessionExercise(input: { exerciseId: string; setCount: number; targetValue: number; weight?: number }) {
+    if (!session) return;
+    await runMutation(
+      () => apiRequest(`/api/workout-sessions/${session.id}/exercises`, {
+        method: "POST",
+        body: JSON.stringify({ ...input, ...(input.weight === undefined ? {} : { weightUnit: "kg" }) }),
+      }),
+      "动作已追加到本次训练。",
+    );
+  }
+
+  async function removeSessionExercise(exercise: WorkoutSession["exercises"][number]) {
+    if (!session || !window.confirm(`从本次训练移除“${exercise.exerciseName}”？已记录的组将不计入完成结果。`)) return;
+    await runMutation(
+      () => apiRequest(`/api/workout-sessions/${session.id}/exercises/${exercise.id}`, { method: "DELETE" }),
+      "动作已从本次训练移除。",
     );
   }
 
@@ -368,8 +387,11 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
               {view === "training" && session && (
                 <TrainingPanel
                   session={session}
+                  exercises={exercises}
                   busy={busy}
                   onRecordSet={recordSet}
+                  onAddExercise={addSessionExercise}
+                  onRemoveExercise={removeSessionExercise}
                   onPause={pauseWorkout}
                   onResume={resumeWorkout}
                   onComplete={completeWorkout}

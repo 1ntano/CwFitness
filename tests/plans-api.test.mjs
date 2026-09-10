@@ -285,6 +285,9 @@ test('User records sets and receives per-Exercise achievement without removed Ex
     body: JSON.stringify({ actualValue: 12, actualWeight: 110, weightUnit: 'kg' }),
   });
   assert.equal(firstSet.status, 200);
+  assert.deepEqual((await firstSet.json()).setResult, {
+    setIndex: 1, actualValue: 12, actualWeightGrams: 110_000, skipped: false,
+  });
 
   const partialWeightSet = await request(`/api/workout-sessions/${session.id}/exercises/${underTargetSessionExercise.id}/sets/1`, {
     method: 'PUT', headers: { cookie },
@@ -322,6 +325,13 @@ test('User records sets and receives per-Exercise achievement without removed Ex
   assert.equal(addedResponse.status, 201);
   const added = (await addedResponse.json()).sessionExercise;
   assert.equal(added.source, 'ADDED');
+  const addedSet = await request(`/api/workout-sessions/${session.id}/exercises/${added.id}/sets/1`, {
+    method: 'PUT', headers: { cookie }, body: JSON.stringify({ actualValue: 45 }),
+  });
+  assert.equal(addedSet.status, 200);
+  assert.deepEqual((await addedSet.json()).setResult, {
+    setIndex: 1, actualValue: 45, actualWeightGrams: null, skipped: false,
+  });
   const removed = await request(`/api/workout-sessions/${session.id}/exercises/${added.id}`, {
     method: 'DELETE', headers: { cookie },
   });
