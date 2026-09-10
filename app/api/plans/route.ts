@@ -12,7 +12,36 @@ export async function GET(request: Request) {
   const plans = await prisma.workoutPlan.findMany({
     where: { userId: session.user.id },
     orderBy: { createdAt: "asc" },
-    select: { id: true, name: true },
+    select: {
+      id: true,
+      name: true,
+      workoutDays: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          name: true,
+          suggestedWeekday: true,
+          plannedExercises: {
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              exerciseId: true,
+              setCount: true,
+              targetValue: true,
+              weightGrams: true,
+              exercise: {
+                select: {
+                  id: true,
+                  name: true,
+                  resistanceType: true,
+                  targetType: true,
+                },
+              },
+            },
+          },
+        },
+      },
+    },
   });
 
   return Response.json({ plans });
@@ -34,7 +63,7 @@ export async function POST(request: Request) {
 
   const plan = await prisma.workoutPlan.create({
     data: { name, userId: session.user.id },
-    select: { id: true, name: true },
+    select: { id: true, name: true, workoutDays: true },
   });
 
   return Response.json({ plan }, { status: 201 });

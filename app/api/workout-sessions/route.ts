@@ -35,6 +35,7 @@ export async function POST(request: Request) {
     include: { workoutPlan: true, plannedExercises: { orderBy: { createdAt: "asc" }, include: { exercise: true } } },
   });
   if (!day) return Response.json({ error: "Workout Day not found" }, { status: 404 });
+  if (day.plannedExercises.length === 0) return Response.json({ error: "Workout Day has no Planned Exercises" }, { status: 409 });
 
   try {
     const workoutSession = await prisma.workoutSession.create({

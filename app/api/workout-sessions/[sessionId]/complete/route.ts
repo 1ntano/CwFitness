@@ -19,6 +19,12 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     orderBy: { createdAt: "asc" },
     include: { exercise: { select: { name: true } }, setResults: true },
   });
+  if (scoredExercises.length === 0) {
+    return Response.json(
+      { error: "A Workout Session must contain at least one Exercise" },
+      { status: 409 },
+    );
+  }
   const exerciseResults = scoredExercises.map((exercise) => {
     const results = new Map(exercise.setResults.map((result) => [result.setIndex, result]));
     let scoreTotal = 0;
@@ -32,8 +38,18 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
         ? (result.actualWeightGrams ?? 0) / exercise.weightGrams
         : targetRatio;
       scoreTotal += Math.min(1, targetRatio, weightRatio);
-      excessTargetValue += Math.max(0, result.actualValue - exercise.targetValue);
-      if (exercise.weightGrams && result.actualWeightGrams) excessWeightGrams += Math.max(0, result.actualWeightGrams - exercise.weightGrams);
+      const targetReached = result.actualValue >= exercise.targetValue;
+      const weightReached =
+        exercise.resistanceType !== "WEIGHTED" ||
+        (exercise.weightGrams !== null &&
+          result.actualWeightGrams !== null &&
+          result.actualWeightGrams >= exercise.weightGrams);
+      if (targetReached && weightReached) {
+        excessTargetValue += result.actualValue - exercise.targetValue;
+        if (exercise.weightGrams && result.actualWeightGrams) {
+          excessWeightGrams += Math.max(0, result.actualWeightGrams - exercise.weightGrams);
+        }
+      }
     }
     return {
       sessionExerciseId: exercise.id,

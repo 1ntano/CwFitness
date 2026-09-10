@@ -20,6 +20,17 @@ export const workoutSessionSelect = {
       setCount: true,
       targetValue: true,
       weightGrams: true,
+      source: true,
+      removedAt: true,
+      setResults: {
+        orderBy: { setIndex: "asc" as const },
+        select: {
+          setIndex: true,
+          actualValue: true,
+          actualWeightGrams: true,
+          skipped: true,
+        },
+      },
     },
   },
 };
