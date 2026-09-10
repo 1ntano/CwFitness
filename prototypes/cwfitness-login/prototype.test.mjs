@@ -3,18 +3,15 @@ import { readFile } from 'node:fs/promises';
 
 const html = await readFile(new URL('./index.html', import.meta.url), 'utf8');
 
-for (const variant of ['Immersive', 'Spotlight', 'Split']) {
-  assert.match(html, new RegExp(`>${variant}<`), `picker is missing ${variant}`);
+assert.ok(html.includes('class="login split"'), 'selected Split login must render');
+for (const removed of ['login immersive', 'login spotlight', 'class="proto-picker"', 'const variants=', 'function setActive']) {
+  assert.ok(!html.includes(removed), `unselected prototype surface remains: ${removed}`);
 }
 
 for (const requirement of ['type="email"', 'type="password"', 'autocomplete="email"', 'autocomplete="current-password"', 'aria-live="polite"', 'data-message']) {
   assert.ok(html.includes(requirement), `missing login requirement: ${requirement}`);
 }
 
-assert.ok(html.includes('class="proto-picker"'), 'missing prototype picker');
-assert.match(html, /url\.searchParams\.set\('v',i\+1\)/, 'variant selection must persist in URL');
-assert.match(html, /e\.key==='ArrowRight'/, 'picker must support arrow keys');
-assert.match(html, /e\.key==='r'\|\|e\.key==='R'/, 'picker must support replay');
 assert.ok(html.includes('prefers-reduced-motion:reduce'), 'missing reduced-motion handling');
 assert.ok(html.includes('prefers-reduced-transparency:reduce'), 'missing reduced-transparency handling');
 assert.ok(html.includes('prefers-contrast:more'), 'missing high-contrast handling');
@@ -29,4 +26,4 @@ const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
 assert.ok(scripts.length, 'prototype must include behavior script');
 assert.doesNotThrow(() => new Function(scripts.at(-1)[1]), 'inline behavior script must parse');
 
-console.log('Login variants, form semantics, picker behavior, script syntax, and motion guardrails passed.');
+console.log('Promoted Split login, form semantics, script syntax, and motion guardrails passed.');
