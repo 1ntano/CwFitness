@@ -41,11 +41,11 @@ Whether an Exercise target is measured by repetitions (Repetitions) or elapsed s
 _Avoid_: Measurement mode, set type
 
 **Workout Session**:
-A same-day performance of a Workout Day whose targets are fixed when the session starts, so they cannot be edited during training and later plan edits cannot change its historical results. Workout Sessions cannot be backdated.
+A performance of a Workout Day whose targets are fixed when the session starts, so they cannot be edited during training and later plan edits cannot change its historical results. It cannot be backdated; if it crosses midnight, it belongs to its start date.
 _Avoid_: Workout, activity log
 
 **Added Exercise**:
-An exercise added while performing a Workout Session that was not originally part of the selected Workout Day. It must have complete targets before being recorded and may also be saved to the Workout Day for future sessions.
+An exercise added while performing a Workout Session that was not originally part of the selected Workout Day. It must have complete targets before being added, after which those targets are locked; it may also be saved to the Workout Day for future sessions.
 _Avoid_: Temporary exercise, ad hoc movement
 
 **Removed Exercise**:
@@ -61,11 +61,11 @@ A Workout Session that can still receive results and does not yet contribute to 
 _Avoid_: Active workout, draft workout
 
 **Paused Session**:
-An In-progress Session temporarily stopped by the user; its paused intervals do not contribute to Training Time.
+An In-progress Session temporarily stopped by the user; its records are frozen and its paused intervals do not contribute to Training Time.
 _Avoid_: Abandoned session, stopped workout
 
 **Training Time**:
-The sum of a Workout Session's active intervals between starting and completing it, excluding every paused interval. Daily Training Time is the sum across Completed Sessions on that date.
+The sum of a Workout Session's active intervals between starting and completing it, excluding every paused interval and any unknown interval after more than five minutes without a heartbeat. Daily Training Time is the sum across Completed Sessions on their start date, across all plans.
 _Avoid_: Elapsed time, session span
 
 **Completed Session**:
@@ -93,5 +93,5 @@ The completed-session dates and per-Exercise trends derived only from Workout Se
 _Avoid_: User progress, global statistics
 
 **Progression Suggestion**:
-An informational prompt shown when the same Exercise in one Workout Plan reaches 100% in three consecutive Completed Sessions and exceeds its target in at least two of them. It suggests only a direction, never a precise increment, and never changes the Workout Plan or requires a response.
+An informational prompt shown when the same Exercise in one Workout Plan reaches 100% in three consecutive Completed Sessions with unchanged targets and exceeds its target in at least two of them. It suggests only a direction and remains until the Planned Exercise target changes; it never changes the plan or requires a response.
 _Avoid_: Automatic progression, recommendation action
