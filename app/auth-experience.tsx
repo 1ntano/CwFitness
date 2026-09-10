@@ -71,7 +71,7 @@ export function AuthExperience() {
     setBusy(false);
   }
 
-  if (user) return <WorkoutWorkspace user={user} onSignOut={signOut} />;
+  if (user) return <WorkoutWorkspace user={user} onSignOut={signOut} onAccountDeleted={() => setUser(null)} />;
 
   return (
     <main className="app-shell">

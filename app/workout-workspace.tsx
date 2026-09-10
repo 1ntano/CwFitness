@@ -5,11 +5,13 @@ import { ExerciseLibrary, type NewExerciseInput } from "./exercise-library";
 import { PlanEditor, type PlannedExerciseInput } from "./plan-editor";
 import { TrainingPanel } from "./training-panel";
 import { WorkoutHistory } from "./workout-history";
+import { SettingsPanel } from "./settings-panel";
 import type { Exercise, ExerciseProgress, Plan, PlannedExercise, WorkoutDay, WorkoutHistorySession, WorkoutSession, WorkspaceView } from "./workout-types";
 
 type WorkoutWorkspaceProps = {
   user: { name: string; email: string };
   onSignOut: () => Promise<void>;
+  onAccountDeleted: () => void;
 };
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -32,12 +34,13 @@ function errorText(error: unknown) {
   return error instanceof Error ? error.message : "操作没有完成，请稍后重试。";
 }
 
-export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
+export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutWorkspaceProps) {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [workoutSessions, setWorkoutSessions] = useState<WorkoutHistorySession[]>([]);
   const [progress, setProgress] = useState<ExerciseProgress[]>([]);
+  const [settings, setSettings] = useState<{ timeZone: string; weightUnit: "kg" | "lb" }>({ timeZone: "UTC", weightUnit: "kg" });
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [view, setView] = useState<WorkspaceView>("today");
   const [busy, setBusy] = useState(false);
@@ -45,16 +48,18 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
   const [notice, setNotice] = useState("");
 
   const loadData = useCallback(async () => {
-    const [plansBody, exercisesBody, sessionBody, historyBody] = await Promise.all([
+    const [plansBody, exercisesBody, sessionBody, historyBody, settingsBody] = await Promise.all([
       apiRequest<{ plans: Plan[] }>("/api/plans", { cache: "no-store" }),
       apiRequest<{ exercises: Exercise[] }>("/api/exercises", { cache: "no-store" }),
       apiRequest<{ workoutSession: WorkoutSession | null }>("/api/workout-sessions/active", { cache: "no-store" }),
       apiRequest<{ workoutSessions: WorkoutHistorySession[] }>("/api/workout-sessions", { cache: "no-store" }),
+      apiRequest<{ settings: { timeZone: string; weightUnit: "kg" | "lb" } }>("/api/settings", { cache: "no-store" }),
     ]);
     setPlans(plansBody.plans);
     setExercises(exercisesBody.exercises);
     setSession(sessionBody.workoutSession);
     setWorkoutSessions(historyBody.workoutSessions);
+    setSettings(settingsBody.settings);
     setSelectedPlanId((current) => current || plansBody.plans[0]?.id || "");
     const progressBodies = await Promise.all(plansBody.plans.map((plan) => apiRequest<{ progress: ExerciseProgress[] }>(`/api/plans/${plan.id}/progress`, { cache: "no-store" })));
     setProgress(progressBodies.flatMap((body) => body.progress));
@@ -299,6 +304,9 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
     if (result !== undefined) setView("history");
   }
 
+  async function saveSettings(nextSettings: { timeZone: string; weightUnit: "kg" | "lb" }) { await runMutation(() => apiRequest("/api/settings", { method: "PATCH", body: JSON.stringify(nextSettings) }), "设置已保存。"); }
+  async function deleteAccount() { const result = await runMutation(() => apiRequest("/api/account", { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE" }) }), "用户已删除。"); if (result !== undefined) onAccountDeleted(); }
+
   async function abandonWorkout() {
     if (!session) return;
     const result = await runMutation(() => apiRequest(`/api/workout-sessions/${session.id}/abandon`, { method: "POST", body: "{}" }), "训练已放弃，不计入进展。");
@@ -332,6 +340,7 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
             <button type="button" aria-current={view === "plans" ? "page" : undefined} onClick={() => setView("plans")}>计划</button>
             <button type="button" aria-current={view === "exercises" ? "page" : undefined} onClick={() => setView("exercises")}>动作</button>
             <button type="button" aria-current={view === "history" ? "page" : undefined} onClick={() => setView("history")}>历史</button>
+            <button type="button" aria-current={view === "settings" ? "page" : undefined} onClick={() => setView("settings")}>设置</button>
             {session && <button type="button" aria-current={view === "training" ? "page" : undefined} onClick={() => setView("training")}>训练</button>}
           </nav>
           <div className="workspace-account">
@@ -421,6 +430,7 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
               )}
 
               {view === "history" && <WorkoutHistory workoutSessions={workoutSessions} busy={busy} onCorrectSet={correctHistoricalSet} />}
+              {view === "settings" && <SettingsPanel settings={settings} busy={busy} onSave={saveSettings} onDelete={deleteAccount} />}
 
               {view === "training" && session && (
                 <TrainingPanel
