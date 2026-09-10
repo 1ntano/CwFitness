@@ -150,3 +150,105 @@ test('User composes a Workout Plan from owned Exercises and Workout Days', async
     weightGrams: 60_000,
   });
 });
+
+async function createExercise(cookie, data) {
+  const response = await request('/api/exercises', {
+    method: 'POST', headers: { cookie }, body: JSON.stringify(data),
+  });
+  assert.equal(response.status, 201);
+  return (await response.json()).exercise;
+}
+
+async function createWorkoutDay(cookie, planId, name) {
+  const response = await request(`/api/plans/${planId}/days`, {
+    method: 'POST', headers: { cookie }, body: JSON.stringify({ name }),
+  });
+  assert.equal(response.status, 201);
+  return (await response.json()).workoutDay;
+}
+
+async function addPlannedExercise(cookie, planId, dayId, data) {
+  const response = await request(`/api/plans/${planId}/days/${dayId}/exercises`, {
+    method: 'POST', headers: { cookie }, body: JSON.stringify(data),
+  });
+  assert.equal(response.status, 201);
+  return (await response.json()).plannedExercise;
+}
+
+test('User starts one snapshotted Workout Session and completes its timed lifecycle', async () => {
+  const cookie = await signUp('SessionOwner');
+  const otherCookie = await signUp('SessionOther');
+  const plan = await createPlan(cookie, 'Session Plan');
+  const day = await createWorkoutDay(cookie, plan.id, 'Strength Day');
+  const exercise = await createExercise(cookie, {
+    name: 'Back Squat', resistanceType: 'WEIGHTED', targetType: 'REPETITIONS',
+  });
+  await addPlannedExercise(cookie, plan.id, day.id, {
+    exerciseId: exercise.id, setCount: 4, targetValue: 6, weight: 100, weightUnit: 'kg',
+  });
+
+  const started = await request('/api/workout-sessions', {
+    method: 'POST', headers: { cookie },
+    body: JSON.stringify({ workoutDayId: day.id, timeZone: 'Asia/Shanghai' }),
+  });
+  assert.equal(started.status, 201);
+  const session = (await started.json()).workoutSession;
+  assert.equal(session.status, 'ACTIVE');
+  assert.equal(session.timeZone, 'Asia/Shanghai');
+  assert.match(session.localStartDate, /^\d{4}-\d{2}-\d{2}$/);
+  assert.equal(typeof session.exercises[0].id, 'string');
+  assert.deepEqual(session.exercises.map((item) => ({
+    exerciseId: item.exerciseId,
+    exerciseName: item.exerciseName,
+    resistanceType: item.resistanceType,
+    targetType: item.targetType,
+    setCount: item.setCount,
+    targetValue: item.targetValue,
+    weightGrams: item.weightGrams,
+  })), [{
+    exerciseId: exercise.id,
+    exerciseName: 'Back Squat',
+    resistanceType: 'WEIGHTED',
+    targetType: 'REPETITIONS',
+    setCount: 4,
+    targetValue: 6,
+    weightGrams: 100_000,
+  }]);
+
+  const duplicate = await request('/api/workout-sessions', {
+    method: 'POST', headers: { cookie },
+    body: JSON.stringify({ workoutDayId: day.id, timeZone: 'Asia/Shanghai' }),
+  });
+  assert.equal(duplicate.status, 409);
+
+  const hidden = await request(`/api/workout-sessions/${session.id}/pause`, {
+    method: 'POST', headers: { cookie: otherCookie }, body: '{}',
+  });
+  assert.equal(hidden.status, 404);
+
+  const paused = await request(`/api/workout-sessions/${session.id}/pause`, {
+    method: 'POST', headers: { cookie }, body: '{}',
+  });
+  assert.equal(paused.status, 200);
+  assert.equal((await paused.json()).workoutSession.status, 'PAUSED');
+
+  const active = await request('/api/workout-sessions/active', { headers: { cookie } });
+  assert.equal(active.status, 200);
+  assert.equal((await active.json()).workoutSession.id, session.id);
+
+  const resumed = await request(`/api/workout-sessions/${session.id}/resume`, {
+    method: 'POST', headers: { cookie }, body: '{}',
+  });
+  assert.equal(resumed.status, 200);
+  assert.equal((await resumed.json()).workoutSession.status, 'ACTIVE');
+
+  const completed = await request(`/api/workout-sessions/${session.id}/complete`, {
+    method: 'POST', headers: { cookie }, body: '{}',
+  });
+  assert.equal(completed.status, 200);
+  const completedSession = (await completed.json()).workoutSession;
+  assert.equal(completedSession.status, 'COMPLETED');
+  assert.equal(Number.isInteger(completedSession.trainingTimeSeconds), true);
+  assert.equal(completedSession.trainingTimeSeconds >= 0, true);
+  assert.equal((await (await request('/api/workout-sessions/active', { headers: { cookie } })).json()).workoutSession, null);
+});

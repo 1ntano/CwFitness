@@ -8,17 +8,18 @@ datasource db {
 }
 
 model User {
-  id            String        @id
-  name          String
-  email         String        @unique
-  emailVerified Boolean       @default(false)
-  image         String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  sessions      Session[]
-  accounts      Account[]
-  workoutPlans  WorkoutPlan[]
-  exercises     Exercise[]
+  id              String           @id
+  name            String
+  email           String           @unique
+  emailVerified   Boolean          @default(false)
+  image           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  sessions        Session[]
+  accounts        Account[]
+  workoutPlans    WorkoutPlan[]
+  exercises       Exercise[]
+  workoutSessions WorkoutSession[]
 
   @@map("user")
 }
@@ -71,13 +72,14 @@ model Verification {
 }
 
 model WorkoutPlan {
-  id          String       @id @default(cuid())
-  name        String
-  userId      String
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workoutDays WorkoutDay[]
+  id              String           @id @default(cuid())
+  name            String
+  userId          String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutDays     WorkoutDay[]
+  workoutSessions WorkoutSession[]
 
   @@index([userId])
   @@map("workout_plan")
@@ -103,6 +105,7 @@ model Exercise {
   updatedAt        DateTime          @updatedAt
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   plannedExercises PlannedExercise[]
+  sessionExercises SessionExercise[]
 
   @@index([userId])
   @@map("exercise")
@@ -117,6 +120,8 @@ model WorkoutDay {
   updatedAt        DateTime          @updatedAt
   workoutPlan      WorkoutPlan       @relation(fields: [workoutPlanId], references: [id], onDelete: Cascade)
   plannedExercises PlannedExercise[]
+  workoutSessions  WorkoutSession[]
+  sessionExercises SessionExercise[]
 
   @@index([workoutPlanId])
   @@map("workout_day")
@@ -137,4 +142,59 @@ model PlannedExercise {
   @@unique([workoutDayId, exerciseId])
   @@index([exerciseId])
   @@map("planned_exercise")
+}
+
+enum WorkoutSessionStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ABANDONED
+}
+
+model WorkoutSession {
+  id                  String               @id @default(cuid())
+  userId              String
+  workoutPlanId       String
+  workoutDayId        String?
+  workoutPlanName     String
+  workoutDayName      String
+  timeZone            String
+  localStartDate      String
+  status              WorkoutSessionStatus @default(ACTIVE)
+  startedAt           DateTime             @default(now())
+  pausedAt            DateTime?
+  pausedDurationMs    Int                  @default(0)
+  completedAt         DateTime?
+  trainingTimeSeconds Int?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutPlan         WorkoutPlan          @relation(fields: [workoutPlanId], references: [id], onDelete: Restrict)
+  workoutDay          WorkoutDay?          @relation(fields: [workoutDayId], references: [id], onDelete: SetNull)
+  exercises           SessionExercise[]
+
+  @@index([userId, status])
+  @@index([workoutPlanId])
+  @@map("workout_session")
+}
+
+model SessionExercise {
+  id               String         @id @default(cuid())
+  workoutSessionId String
+  exerciseId       String
+  exerciseName     String
+  resistanceType   ResistanceType
+  targetType       TargetType
+  setCount         Int
+  targetValue      Int
+  weightGrams      Int?
+  createdAt        DateTime       @default(now())
+  workoutSession   WorkoutSession @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)
+  exercise         Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  workoutDay       WorkoutDay?    @relation(fields: [workoutDayId], references: [id])
+  workoutDayId     String?
+
+  @@index([workoutSessionId])
+  @@index([exerciseId])
+  @@map("session_exercise")
 }
