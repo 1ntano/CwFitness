@@ -73,7 +73,7 @@ The sum of a Workout Session's active intervals between starting and completing 
 _Avoid_: Elapsed time, session span
 
 **Completed Session**:
-A Workout Session the user has explicitly finished; it contributes to progress statistics using its actual completion date.
+A Workout Session the user has explicitly finished; it contributes to progress statistics using its locked local start date.
 _Avoid_: Closed workout, saved workout
 
 **Historical Correction**:
