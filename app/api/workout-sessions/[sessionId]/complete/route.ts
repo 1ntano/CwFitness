@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { ownedSession, scoreExercises, workoutSessionSelect } from "@/lib/workout-sessions";
+import { confirmedActiveDurationMs, ownedSession, scoreExercises, workoutSessionSelect } from "@/lib/workout-sessions";
 
 export async function POST(request: Request, context: { params: Promise<{ sessionId: string }> }) {
   const authSession = await auth.api.getSession({ headers: request.headers });
@@ -12,8 +12,8 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   const completedAt = new Date();
   const finalPauseMs = current.status === "PAUSED" && current.pausedAt ? Math.max(0, completedAt.getTime() - current.pausedAt.getTime()) : 0;
   const pausedDurationMs = current.pausedDurationMs + finalPauseMs;
-  const inactiveAfterHeartbeatMs = current.lastHeartbeatAt ? Math.max(0, completedAt.getTime() - current.lastHeartbeatAt.getTime() - 300_000) : 0;
-  const trainingTimeSeconds = Math.max(0, Math.floor((completedAt.getTime() - current.startedAt.getTime() - pausedDurationMs - inactiveAfterHeartbeatMs) / 1000));
+  const activeDurationMs = current.activeDurationMs + (current.status === "ACTIVE" ? confirmedActiveDurationMs(current.lastHeartbeatAt, completedAt) : 0);
+  const trainingTimeSeconds = Math.max(0, Math.floor(activeDurationMs / 1000));
 
   const scoredExercises = await prisma.sessionExercise.findMany({
     where: { workoutSessionId: sessionId, removedAt: null },
@@ -30,7 +30,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
 
   const workoutSession = await prisma.workoutSession.update({
     where: { id: sessionId },
-    data: { status: "COMPLETED", completedAt, pausedAt: null, pausedDurationMs, trainingTimeSeconds },
+    data: { status: "COMPLETED", completedAt, pausedAt: null, pausedDurationMs, activeDurationMs, lastHeartbeatAt: null, trainingTimeSeconds },
     select: workoutSessionSelect,
   });
   return Response.json({ workoutSession, exerciseResults });

@@ -1,5 +1,12 @@
 import { prisma } from "@/lib/prisma";
 
+const maxHeartbeatIntervalMs = 5 * 60 * 1000;
+
+export function confirmedActiveDurationMs(lastHeartbeatAt: Date | null, now: Date) {
+  if (!lastHeartbeatAt) return 0;
+  return Math.min(maxHeartbeatIntervalMs, Math.max(0, now.getTime() - lastHeartbeatAt.getTime()));
+}
+
 export type ExerciseResult = {
   sessionExerciseId: string;
   exerciseId: string;
@@ -98,6 +105,6 @@ export const workoutSessionHistorySelect = {
 export async function ownedSession(userId: string, sessionId: string) {
   return prisma.workoutSession.findFirst({
     where: { id: sessionId, userId },
-    select: { ...workoutSessionSelect, pausedDurationMs: true },
+    select: { ...workoutSessionSelect, pausedDurationMs: true, activeDurationMs: true },
   });
 }

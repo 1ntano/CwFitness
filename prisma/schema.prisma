@@ -171,6 +171,7 @@ model WorkoutSession {
   startedAt           DateTime             @default(now())
   pausedAt            DateTime?
   pausedDurationMs    Int                  @default(0)
+  activeDurationMs    Int                  @default(0)
   completedAt         DateTime?
   trainingTimeSeconds Int?
   lastHeartbeatAt     DateTime?

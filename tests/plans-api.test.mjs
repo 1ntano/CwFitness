@@ -243,6 +243,11 @@ test('User starts one snapshotted Workout Session and completes its timed lifecy
   });
   assert.equal(hidden.status, 404);
 
+  const heartbeat = await request(`/api/workout-sessions/${session.id}/heartbeat`, {
+    method: 'POST', headers: { cookie }, body: '{}',
+  });
+  assert.equal(heartbeat.status, 204);
+
   const paused = await request(`/api/workout-sessions/${session.id}/pause`, {
     method: 'POST', headers: { cookie }, body: '{}',
   });

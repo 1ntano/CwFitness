@@ -13,7 +13,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   const pausedDurationMs = current.pausedDurationMs + Math.max(0, Date.now() - current.pausedAt.getTime());
   const workoutSession = await prisma.workoutSession.update({
     where: { id: sessionId },
-    data: { status: "ACTIVE", pausedAt: null, pausedDurationMs },
+    data: { status: "ACTIVE", pausedAt: null, pausedDurationMs, lastHeartbeatAt: new Date() },
     select: workoutSessionSelect,
   });
   return Response.json({ workoutSession });
