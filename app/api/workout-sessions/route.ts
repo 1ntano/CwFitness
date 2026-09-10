@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { workoutSessionSelect } from "@/lib/workout-sessions";
+import { scoreExercises, workoutSessionHistorySelect, workoutSessionSelect } from "@/lib/workout-sessions";
 
 function localDate(now: Date, timeZone: string) {
   try {
@@ -12,6 +12,21 @@ function localDate(now: Date, timeZone: string) {
   } catch {
     return null;
   }
+}
+
+export async function GET(request: Request) {
+  const session = await auth.api.getSession({ headers: request.headers });
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+  const workoutSessions = await prisma.workoutSession.findMany({
+    where: { userId: session.user.id, status: "COMPLETED" },
+    orderBy: { completedAt: "desc" },
+    select: workoutSessionHistorySelect,
+  });
+  return Response.json({ workoutSessions: workoutSessions.map(({ exercises, ...workoutSession }) => ({
+    ...workoutSession,
+    exercises,
+    exerciseResults: scoreExercises(exercises),
+  })) });
 }
 
 export async function POST(request: Request) {

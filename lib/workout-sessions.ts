@@ -1,5 +1,51 @@
 import { prisma } from "@/lib/prisma";
 
+export type ExerciseResult = {
+  sessionExerciseId: string;
+  exerciseId: string;
+  exerciseName: string;
+  achievementRate: number;
+  excessTargetValue: number;
+  excessWeightGrams: number;
+};
+
+type ScoredExercise = {
+  id: string;
+  exerciseId: string;
+  resistanceType: "WEIGHTED" | "BODYWEIGHT";
+  setCount: number;
+  targetValue: number;
+  weightGrams: number | null;
+  exercise: { name: string };
+  setResults: Array<{ setIndex: number; actualValue: number | null; actualWeightGrams: number | null; skipped: boolean }>;
+};
+
+export function scoreExercises(exercises: ScoredExercise[]): ExerciseResult[] {
+  return exercises.map((exercise) => {
+    const results = new Map(exercise.setResults.map((result) => [result.setIndex, result]));
+    let scoreTotal = 0;
+    let excessTargetValue = 0;
+    let excessWeightGrams = 0;
+    for (let index = 1; index <= exercise.setCount; index += 1) {
+      const result = results.get(index);
+      if (!result || result.skipped || result.actualValue === null) continue;
+      const targetRatio = result.actualValue / exercise.targetValue;
+      const weightRatio = exercise.resistanceType === "WEIGHTED" && exercise.weightGrams
+        ? (result.actualWeightGrams ?? 0) / exercise.weightGrams
+        : targetRatio;
+      scoreTotal += Math.min(1, targetRatio, weightRatio);
+      const targetReached = result.actualValue >= exercise.targetValue;
+      const weightReached = exercise.resistanceType !== "WEIGHTED" ||
+        (exercise.weightGrams !== null && result.actualWeightGrams !== null && result.actualWeightGrams >= exercise.weightGrams);
+      if (targetReached && weightReached) {
+        excessTargetValue += result.actualValue - exercise.targetValue;
+        if (exercise.weightGrams && result.actualWeightGrams) excessWeightGrams += Math.max(0, result.actualWeightGrams - exercise.weightGrams);
+      }
+    }
+    return { sessionExerciseId: exercise.id, exerciseId: exercise.exerciseId, exerciseName: exercise.exercise.name, achievementRate: Math.round((scoreTotal / exercise.setCount) * 100), excessTargetValue, excessWeightGrams };
+  });
+}
+
 export const workoutSessionSelect = {
   id: true,
   status: true,
@@ -31,6 +77,19 @@ export const workoutSessionSelect = {
           skipped: true,
         },
       },
+    },
+  },
+};
+
+export const workoutSessionHistorySelect = {
+  ...workoutSessionSelect,
+  workoutPlanName: true,
+  workoutDayName: true,
+  exercises: {
+    orderBy: { createdAt: "asc" as const },
+    select: {
+      ...workoutSessionSelect.exercises.select,
+      exercise: { select: { name: true } },
     },
   },
 };

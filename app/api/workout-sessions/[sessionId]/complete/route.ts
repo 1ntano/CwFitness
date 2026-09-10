@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { ownedSession, workoutSessionSelect } from "@/lib/workout-sessions";
+import { ownedSession, scoreExercises, workoutSessionSelect } from "@/lib/workout-sessions";
 
 export async function POST(request: Request, context: { params: Promise<{ sessionId: string }> }) {
   const authSession = await auth.api.getSession({ headers: request.headers });
@@ -25,41 +25,7 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
       { status: 409 },
     );
   }
-  const exerciseResults = scoredExercises.map((exercise) => {
-    const results = new Map(exercise.setResults.map((result) => [result.setIndex, result]));
-    let scoreTotal = 0;
-    let excessTargetValue = 0;
-    let excessWeightGrams = 0;
-    for (let index = 1; index <= exercise.setCount; index += 1) {
-      const result = results.get(index);
-      if (!result || result.skipped || result.actualValue === null) continue;
-      const targetRatio = result.actualValue / exercise.targetValue;
-      const weightRatio = exercise.resistanceType === "WEIGHTED" && exercise.weightGrams
-        ? (result.actualWeightGrams ?? 0) / exercise.weightGrams
-        : targetRatio;
-      scoreTotal += Math.min(1, targetRatio, weightRatio);
-      const targetReached = result.actualValue >= exercise.targetValue;
-      const weightReached =
-        exercise.resistanceType !== "WEIGHTED" ||
-        (exercise.weightGrams !== null &&
-          result.actualWeightGrams !== null &&
-          result.actualWeightGrams >= exercise.weightGrams);
-      if (targetReached && weightReached) {
-        excessTargetValue += result.actualValue - exercise.targetValue;
-        if (exercise.weightGrams && result.actualWeightGrams) {
-          excessWeightGrams += Math.max(0, result.actualWeightGrams - exercise.weightGrams);
-        }
-      }
-    }
-    return {
-      sessionExerciseId: exercise.id,
-      exerciseId: exercise.exerciseId,
-      exerciseName: exercise.exercise.name,
-      achievementRate: Math.round((scoreTotal / exercise.setCount) * 100),
-      excessTargetValue,
-      excessWeightGrams,
-    };
-  });
+  const exerciseResults = scoreExercises(scoredExercises);
 
   const workoutSession = await prisma.workoutSession.update({
     where: { id: sessionId },

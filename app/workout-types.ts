@@ -63,4 +63,20 @@ export type WorkoutSession = {
   exercises: SessionExercise[];
 };
 
-export type WorkspaceView = "today" | "plans" | "exercises" | "training";
+export type ExerciseResult = {
+  sessionExerciseId: string;
+  exerciseId: string;
+  exerciseName: string;
+  achievementRate: number;
+  excessTargetValue: number;
+  excessWeightGrams: number;
+};
+
+export type WorkoutHistorySession = Omit<WorkoutSession, "status"> & {
+  status: "COMPLETED";
+  workoutPlanName: string;
+  workoutDayName: string;
+  exerciseResults: ExerciseResult[];
+};
+
+export type WorkspaceView = "today" | "plans" | "exercises" | "training" | "history";

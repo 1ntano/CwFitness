@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ExerciseLibrary, type NewExerciseInput } from "./exercise-library";
 import { PlanEditor, type PlannedExerciseInput } from "./plan-editor";
 import { TrainingPanel } from "./training-panel";
-import type { Exercise, Plan, PlannedExercise, WorkoutDay, WorkoutSession, WorkspaceView } from "./workout-types";
+import { WorkoutHistory } from "./workout-history";
+import type { Exercise, Plan, PlannedExercise, WorkoutDay, WorkoutHistorySession, WorkoutSession, WorkspaceView } from "./workout-types";
 
 type WorkoutWorkspaceProps = {
   user: { name: string; email: string };
@@ -35,6 +36,7 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [session, setSession] = useState<WorkoutSession | null>(null);
+  const [workoutSessions, setWorkoutSessions] = useState<WorkoutHistorySession[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [view, setView] = useState<WorkspaceView>("today");
   const [busy, setBusy] = useState(false);
@@ -42,14 +44,16 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
   const [notice, setNotice] = useState("");
 
   const loadData = useCallback(async () => {
-    const [plansBody, exercisesBody, sessionBody] = await Promise.all([
+    const [plansBody, exercisesBody, sessionBody, historyBody] = await Promise.all([
       apiRequest<{ plans: Plan[] }>("/api/plans", { cache: "no-store" }),
       apiRequest<{ exercises: Exercise[] }>("/api/exercises", { cache: "no-store" }),
       apiRequest<{ workoutSession: WorkoutSession | null }>("/api/workout-sessions/active", { cache: "no-store" }),
+      apiRequest<{ workoutSessions: WorkoutHistorySession[] }>("/api/workout-sessions", { cache: "no-store" }),
     ]);
     setPlans(plansBody.plans);
     setExercises(exercisesBody.exercises);
     setSession(sessionBody.workoutSession);
+    setWorkoutSessions(historyBody.workoutSessions);
     setSelectedPlanId((current) => current || plansBody.plans[0]?.id || "");
   }, []);
 
@@ -277,7 +281,7 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
       () => apiRequest(`/api/workout-sessions/${session.id}/complete`, { method: "POST", body: "{}" }),
       "训练已完成。",
     );
-    if (result !== undefined) setView("today");
+    if (result !== undefined) setView("history");
   }
 
   const allDays = plans.flatMap((plan) => plan.workoutDays.map((day) => ({ plan, day })));
@@ -298,6 +302,7 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
             <button type="button" aria-current={view === "today" ? "page" : undefined} onClick={() => setView("today")}>今日</button>
             <button type="button" aria-current={view === "plans" ? "page" : undefined} onClick={() => setView("plans")}>计划</button>
             <button type="button" aria-current={view === "exercises" ? "page" : undefined} onClick={() => setView("exercises")}>动作</button>
+            <button type="button" aria-current={view === "history" ? "page" : undefined} onClick={() => setView("history")}>历史</button>
             {session && <button type="button" aria-current={view === "training" ? "page" : undefined} onClick={() => setView("training")}>训练</button>}
           </nav>
           <div className="workspace-account">
@@ -383,6 +388,8 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
                   onDelete={deleteExercise}
                 />
               )}
+
+              {view === "history" && <WorkoutHistory workoutSessions={workoutSessions} />}
 
               {view === "training" && session && (
                 <TrainingPanel

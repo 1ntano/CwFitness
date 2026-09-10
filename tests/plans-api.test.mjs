@@ -250,6 +250,20 @@ test('User starts one snapshotted Workout Session and completes its timed lifecy
   assert.equal(completedSession.status, 'COMPLETED');
   assert.equal(Number.isInteger(completedSession.trainingTimeSeconds), true);
   assert.equal(completedSession.trainingTimeSeconds >= 0, true);
+  const history = await request('/api/workout-sessions', { headers: { cookie } });
+  assert.equal(history.status, 200);
+  const [historySession] = (await history.json()).workoutSessions;
+  assert.equal(historySession.id, session.id);
+  assert.equal(historySession.workoutPlanName, 'Session Plan');
+  assert.equal(historySession.workoutDayName, 'Strength Day');
+  assert.deepEqual(historySession.exerciseResults, [{
+    sessionExerciseId: session.exercises[0].id,
+    exerciseId: exercise.id,
+    exerciseName: 'Back Squat',
+    achievementRate: 0,
+    excessTargetValue: 0,
+    excessWeightGrams: 0,
+  }]);
   assert.equal((await (await request('/api/workout-sessions/active', { headers: { cookie } })).json()).workoutSession, null);
 });
 
