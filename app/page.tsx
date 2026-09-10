@@ -1,3 +1,5 @@
+import { AuthExperience } from "./auth-experience";
+
 export default function Home() {
-  return <main>CwFitness backend foundation</main>;
+  return <AuthExperience />;
 }

@@ -27,6 +27,14 @@ async function signUp(label) {
   return cookie;
 }
 
+test('Home renders the interactive Split authentication flow', async () => {
+  const response = await fetch(baseUrl);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /data-testid="auth-form"/);
+  assert.match(html, /继续训练。/);
+});
+
 test('Workout Plans are isolated by the authenticated User', async () => {
   const anonymous = await request('/api/plans');
   assert.equal(anonymous.status, 401);
