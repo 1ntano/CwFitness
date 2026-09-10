@@ -78,6 +78,24 @@ test('User settings persist the preferred weight unit and pounds are stored as g
   assert.equal(planned.weightGrams, 61_235);
 });
 
+test('Archived plans cannot start workouts and account deletion requires confirmation', async () => {
+  const cookie = await signUp('LifecycleOwner');
+  const plan = await createPlan(cookie, 'Archived Plan');
+  const day = await createWorkoutDay(cookie, plan.id, 'Archived Day');
+  const exercise = await createExercise(cookie, { name: 'Archive Press', resistanceType: 'WEIGHTED', targetType: 'REPETITIONS' });
+  await addPlannedExercise(cookie, plan.id, day.id, { exerciseId: exercise.id, setCount: 3, targetValue: 8, weight: 60, weightUnit: 'kg' });
+  const archived = await request(`/api/plans/${plan.id}`, { method: 'PATCH', headers: { cookie }, body: JSON.stringify({ archived: true }) });
+  assert.equal(archived.status, 200);
+  const blockedStart = await request('/api/workout-sessions', { method: 'POST', headers: { cookie }, body: JSON.stringify({ workoutDayId: day.id, timeZone: 'UTC' }) });
+  assert.equal(blockedStart.status, 404);
+
+  const unconfirmedDelete = await request('/api/account', { method: 'DELETE', headers: { cookie }, body: '{}' });
+  assert.equal(unconfirmedDelete.status, 400);
+  const deleted = await request('/api/account', { method: 'DELETE', headers: { cookie }, body: JSON.stringify({ confirmation: 'DELETE' }) });
+  assert.equal(deleted.status, 204);
+  assert.equal((await request('/api/plans', { headers: { cookie } })).status, 401);
+});
+
 async function createPlan(cookie, name) {
   const response = await request('/api/plans', {
     method: 'POST',

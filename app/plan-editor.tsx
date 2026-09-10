@@ -140,7 +140,7 @@ export function PlanEditor(props: PlanEditorProps) {
                 }}
               >
                 <strong>{plan.name}</strong>
-                <span>{plan.workoutDays.length} 个训练日</span>
+                <span>{plan.workoutDays.length} 个训练日{plan.archivedAt !== null ? " · 已归档" : ""}</span>
               </button>
             ))}
           </aside>
@@ -272,7 +272,7 @@ export function PlanEditor(props: PlanEditorProps) {
                             <div className="row-copy">
                               <h4>{planned.exercise.name}</h4>
                               <p>{plannedTarget(planned, weightUnit)}</p>
-                              {progressFor(planned) && <p className="progress-copy">近 {progressFor(planned)?.recent.length} 次：{progressFor(planned)?.recent.map((item) => `${item.achievementRate}%`).join(" · ")}{progressFor(planned)?.progressionSuggestion ? ` · 已连续达标，建议${progressFor(planned)?.recent.some((item) => item.excessWeightGrams > 0) ? "增加重量" : planned.exercise.targetType === "DURATION" ? "增加秒数" : "增加次数"}` : ""}</p>}
+                              {progressFor(planned) && <p className="progress-copy">近 {progressFor(planned)?.recent.map((item) => `${item.date.slice(5)} ${item.achievementRate}%`).join(" · ")}{progressFor(planned)?.progressionSuggestion ? ` · 已连续达标，建议${progressFor(planned)?.recent.some((item) => item.excessWeightGrams > 0) ? "增加重量" : planned.exercise.targetType === "DURATION" ? "增加秒数" : "增加次数"}` : ""}</p>}
                             </div>
                             <div className="row-actions">
                               <details className="inline-editor">

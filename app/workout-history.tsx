@@ -26,12 +26,18 @@ type HistoryProps = {
 };
 
 export function WorkoutHistory({ workoutSessions, busy, weightUnit, onCorrectSet }: HistoryProps) {
+  const totalSeconds = workoutSessions.reduce((total, session) => total + (session.trainingTimeSeconds ?? 0), 0);
+  const today = new Date();
+  const weekStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7));
+  const weekStartDate = [weekStart.getFullYear(), String(weekStart.getMonth() + 1).padStart(2, "0"), String(weekStart.getDate()).padStart(2, "0")].join("-");
+  const completedThisWeek = workoutSessions.filter((session) => session.localStartDate >= weekStartDate).length;
   return (
     <section className="workspace-section" aria-labelledby="history-title">
       <header className="section-heading">
         <div><p className="section-kicker">训练历史</p><h1 id="history-title">回顾每一次完成。</h1></div>
         <p>仅显示已完成训练；成绩按训练结束时的实际次数、秒数和重量计算。</p>
       </header>
+      {workoutSessions.length > 0 && <div className="session-summary" aria-label="训练汇总"><div><span>完成训练</span><strong>{workoutSessions.length} 场</strong></div><div><span>本周完成</span><strong>{completedThisWeek} 场</strong></div><div><span>累计训练</span><strong>{duration(totalSeconds)}</strong></div></div>}
       {workoutSessions.length === 0 ? <p className="empty-state">完成第一场训练后，结果会显示在这里。</p> : <div className="history-list">
         {workoutSessions.map((session) => (
           <details className="history-session" key={session.id} open={workoutSessions[0]?.id === session.id}>
