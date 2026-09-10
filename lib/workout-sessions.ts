@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 
-const maxHeartbeatIntervalMs = 5 * 60 * 1000;
+export const maxHeartbeatIntervalMs = 5 * 60 * 1000;
+
+export function heartbeatIsStale(lastHeartbeatAt: Date | null, now: Date) {
+  return lastHeartbeatAt !== null && now.getTime() - lastHeartbeatAt.getTime() > maxHeartbeatIntervalMs;
+}
 
 export function confirmedActiveDurationMs(lastHeartbeatAt: Date | null, now: Date) {
   if (!lastHeartbeatAt) return 0;

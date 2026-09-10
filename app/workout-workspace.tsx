@@ -83,11 +83,15 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
 
   useEffect(() => {
     if (!session || session.status !== "ACTIVE") return;
-    const heartbeat = () => { void apiRequest(`/api/workout-sessions/${session.id}/heartbeat`, { method: "POST", body: "{}" }); };
+    const heartbeat = () => {
+      void apiRequest(`/api/workout-sessions/${session.id}/heartbeat`, { method: "POST", body: "{}" }).catch(() => {
+        void loadData().then(() => setNotice("训练已因长时间无活动而挂起；确认后可继续训练。"));
+      });
+    };
     heartbeat();
     const timer = window.setInterval(heartbeat, 60_000);
     return () => window.clearInterval(timer);
-  }, [session]);
+  }, [loadData, session]);
 
   async function runMutation<T>(action: () => Promise<T>, successMessage: string) {
     setBusy(true);
