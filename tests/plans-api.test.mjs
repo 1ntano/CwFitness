@@ -264,6 +264,22 @@ test('User starts one snapshotted Workout Session and completes its timed lifecy
     excessTargetValue: 0,
     excessWeightGrams: 0,
   }]);
+  const progress = await request(`/api/plans/${plan.id}/progress`, { headers: { cookie } });
+  assert.equal(progress.status, 200);
+  assert.deepEqual((await progress.json()).progress, [{
+    key: `${exercise.id}:4:6:100000`,
+    exerciseId: exercise.id,
+    recent: [{
+      date: session.localStartDate,
+      sessionExerciseId: session.exercises[0].id,
+      exerciseId: exercise.id,
+      exerciseName: 'Back Squat',
+      achievementRate: 0,
+      excessTargetValue: 0,
+      excessWeightGrams: 0,
+    }],
+    progressionSuggestion: false,
+  }]);
   assert.equal((await (await request('/api/workout-sessions/active', { headers: { cookie } })).json()).workoutSession, null);
 });
 

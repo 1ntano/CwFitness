@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import type { Exercise, Plan, PlannedExercise, WorkoutDay } from "./workout-types";
+import type { Exercise, ExerciseProgress, Plan, PlannedExercise, WorkoutDay } from "./workout-types";
 
 export type PlannedExerciseInput = {
   exerciseId: string;
@@ -16,6 +16,7 @@ type PlanEditorProps = {
   exercises: Exercise[];
   selectedPlanId: string;
   busy: boolean;
+  progress: ExerciseProgress[];
   onSelectPlan: (planId: string) => void;
   onCreatePlan: (name: string) => Promise<void>;
   onRenamePlan: (plan: Plan, name: string) => Promise<void>;
@@ -47,6 +48,7 @@ export function PlanEditor(props: PlanEditorProps) {
     exercises,
     selectedPlanId,
     busy,
+    progress,
     onSelectPlan,
     onCreatePlan,
     onRenamePlan,
@@ -63,6 +65,7 @@ export function PlanEditor(props: PlanEditorProps) {
   const selectedDay = selectedPlan?.workoutDays.find((day) => day.id === selectedDayId)
     ?? selectedPlan?.workoutDays[0]
     ?? null;
+  const progressFor = (planned: PlannedExercise) => progress.find((item) => item.key === [planned.exerciseId, planned.setCount, planned.targetValue, planned.weightGrams].join(":"));
 
   async function submitPlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -263,6 +266,7 @@ export function PlanEditor(props: PlanEditorProps) {
                             <div className="row-copy">
                               <h4>{planned.exercise.name}</h4>
                               <p>{plannedTarget(planned)}</p>
+                              {progressFor(planned) && <p className="progress-copy">近 {progressFor(planned)?.recent.length} 次：{progressFor(planned)?.recent.map((item) => `${item.achievementRate}%`).join(" · ")}{progressFor(planned)?.progressionSuggestion ? " · 已连续达标，建议提高目标" : ""}</p>}
                             </div>
                             <div className="row-actions">
                               <details className="inline-editor">

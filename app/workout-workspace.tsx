@@ -5,7 +5,7 @@ import { ExerciseLibrary, type NewExerciseInput } from "./exercise-library";
 import { PlanEditor, type PlannedExerciseInput } from "./plan-editor";
 import { TrainingPanel } from "./training-panel";
 import { WorkoutHistory } from "./workout-history";
-import type { Exercise, Plan, PlannedExercise, WorkoutDay, WorkoutHistorySession, WorkoutSession, WorkspaceView } from "./workout-types";
+import type { Exercise, ExerciseProgress, Plan, PlannedExercise, WorkoutDay, WorkoutHistorySession, WorkoutSession, WorkspaceView } from "./workout-types";
 
 type WorkoutWorkspaceProps = {
   user: { name: string; email: string };
@@ -37,6 +37,7 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [workoutSessions, setWorkoutSessions] = useState<WorkoutHistorySession[]>([]);
+  const [progress, setProgress] = useState<ExerciseProgress[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
   const [view, setView] = useState<WorkspaceView>("today");
   const [busy, setBusy] = useState(false);
@@ -55,6 +56,8 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
     setSession(sessionBody.workoutSession);
     setWorkoutSessions(historyBody.workoutSessions);
     setSelectedPlanId((current) => current || plansBody.plans[0]?.id || "");
+    const progressBodies = await Promise.all(plansBody.plans.map((plan) => apiRequest<{ progress: ExerciseProgress[] }>(`/api/plans/${plan.id}/progress`, { cache: "no-store" })));
+    setProgress(progressBodies.flatMap((body) => body.progress));
   }, []);
 
   useEffect(() => {
@@ -366,6 +369,7 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
                   exercises={exercises}
                   selectedPlanId={selectedPlanId}
                   busy={busy}
+                  progress={progress}
                   onSelectPlan={setSelectedPlanId}
                   onCreatePlan={createPlan}
                   onRenamePlan={renamePlan}
