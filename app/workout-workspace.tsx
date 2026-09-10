@@ -225,7 +225,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
     try {
       await apiRequest<{ workoutSession: WorkoutSession }>("/api/workout-sessions", {
         method: "POST",
-        body: JSON.stringify({ workoutDayId: day.id, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+        body: JSON.stringify({ workoutDayId: day.id, timeZone: settings.timeZone }),
       });
       await loadData();
       setView("training");
