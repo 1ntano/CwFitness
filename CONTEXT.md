@@ -5,7 +5,7 @@ This context describes how a person defines recurring fitness plans, records com
 ## Language
 
 **User**:
-A person who owns fitness plans and workout history. The MVP has one user, while ownership remains part of the domain.
+A registered person whose Workout Plans, Exercises, Workout Sessions, settings, and progress are private to that User.
 _Avoid_: Account, athlete
 
 **Workout Plan**:
