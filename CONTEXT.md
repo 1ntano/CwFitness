@@ -21,8 +21,12 @@ A named part of a Workout Plan containing the exercises intended for one trainin
 _Avoid_: Split, schedule
 
 **Exercise**:
-A named physical activity with a stable identity. Its latest name is used when displaying both current and historical results.
+A user-created physical activity with a stable identity. Its latest name is used when displaying both current and historical results; the MVP has no built-in Exercise library.
 _Avoid_: Movement, exercise name
+
+**Reference Media**:
+A local MP4 or GIF associated with an Exercise as a visual movement reference, previewed on hover and enlarged on request.
+_Avoid_: Tutorial, hosted video
 
 **Planned Exercise**:
 A prescribed Exercise within a Workout Day, with one uniform target shared by all of its planned sets.
@@ -31,6 +35,10 @@ _Avoid_: Movement template, task
 **Resistance Type**:
 Whether an Exercise is performed with external weight (Weighted) or without required external weight (Bodyweight).
 _Avoid_: Weight mode, load type
+
+**Weight Unit**:
+The user's chosen display unit for equivalent weight values, either kilograms (kg) or pounds (lb). Switching units converts displayed values without changing their meaning.
+_Avoid_: Measurement system, stored unit
 
 **Target Type**:
 Whether an Exercise target is measured by repetitions (Repetitions) or elapsed seconds (Duration).
@@ -77,5 +85,5 @@ The completed-session dates and per-Exercise trends derived only from Workout Se
 _Avoid_: User progress, global statistics
 
 **Progression Suggestion**:
-An informational prompt shown when the same Exercise in one Workout Plan reaches 100% in three consecutive Completed Sessions and exceeds its target in at least two of them. It never changes the Workout Plan or requires an accept-or-dismiss response.
+An informational prompt shown when the same Exercise in one Workout Plan reaches 100% in three consecutive Completed Sessions and exceeds its target in at least two of them. It suggests only a direction, never a precise increment, and never changes the Workout Plan or requires a response.
 _Avoid_: Automatic progression, recommendation action
