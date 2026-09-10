@@ -60,3 +60,93 @@ test('Workout Plans are isolated by the authenticated User', async () => {
   assert.equal(bobPlans.status, 200);
   assert.deepEqual(await bobPlans.json(), { plans: [] });
 });
+
+async function createPlan(cookie, name) {
+  const response = await request('/api/plans', {
+    method: 'POST',
+    headers: { cookie },
+    body: JSON.stringify({ name }),
+  });
+  if (response.status !== 201) assert.fail(`create plan failed: ${await response.text()}`);
+  return (await response.json()).plan;
+}
+
+test('User composes a Workout Plan from owned Exercises and Workout Days', async () => {
+  const aliceCookie = await signUp('PlanAuthor');
+  const bobCookie = await signUp('OtherUser');
+  const plan = await createPlan(aliceCookie, 'Push Pull Legs');
+
+  const createdExercise = await request('/api/exercises', {
+    method: 'POST',
+    headers: { cookie: aliceCookie },
+    body: JSON.stringify({
+      name: 'Bench Press',
+      resistanceType: 'WEIGHTED',
+      targetType: 'REPETITIONS',
+    }),
+  });
+  assert.equal(createdExercise.status, 201);
+  const exercise = (await createdExercise.json()).exercise;
+
+  const renamed = await request(`/api/exercises/${exercise.id}`, {
+    method: 'PATCH',
+    headers: { cookie: aliceCookie },
+    body: JSON.stringify({ name: 'Barbell Bench Press' }),
+  });
+  assert.equal(renamed.status, 200);
+  assert.equal((await renamed.json()).exercise.id, exercise.id);
+
+  const aliceExercises = await request('/api/exercises', { headers: { cookie: aliceCookie } });
+  assert.deepEqual((await aliceExercises.json()).exercises, [{
+    id: exercise.id,
+    name: 'Barbell Bench Press',
+    resistanceType: 'WEIGHTED',
+    targetType: 'REPETITIONS',
+  }]);
+  const bobExercises = await request('/api/exercises', { headers: { cookie: bobCookie } });
+  assert.deepEqual(await bobExercises.json(), { exercises: [] });
+
+  const dayResponse = await request(`/api/plans/${plan.id}/days`, {
+    method: 'POST',
+    headers: { cookie: aliceCookie },
+    body: JSON.stringify({ name: 'Push Day', suggestedWeekday: 1 }),
+  });
+  assert.equal(dayResponse.status, 201);
+  const day = (await dayResponse.json()).workoutDay;
+
+  const forbiddenDay = await request(`/api/plans/${plan.id}/days`, {
+    method: 'POST',
+    headers: { cookie: bobCookie },
+    body: JSON.stringify({ name: 'Stolen Day' }),
+  });
+  assert.equal(forbiddenDay.status, 404);
+
+  const invalidTarget = await request(`/api/plans/${plan.id}/days/${day.id}/exercises`, {
+    method: 'POST',
+    headers: { cookie: aliceCookie },
+    body: JSON.stringify({ exerciseId: exercise.id, setCount: 3, targetValue: 8 }),
+  });
+  assert.equal(invalidTarget.status, 400);
+
+  const plannedResponse = await request(`/api/plans/${plan.id}/days/${day.id}/exercises`, {
+    method: 'POST',
+    headers: { cookie: aliceCookie },
+    body: JSON.stringify({
+      exerciseId: exercise.id,
+      setCount: 3,
+      targetValue: 8,
+      weight: 60,
+      weightUnit: 'kg',
+    }),
+  });
+  assert.equal(plannedResponse.status, 201);
+  const plannedExercise = (await plannedResponse.json()).plannedExercise;
+  assert.equal(typeof plannedExercise.id, 'string');
+  assert.deepEqual({ ...plannedExercise, id: undefined }, {
+    id: undefined,
+    exerciseId: exercise.id,
+    setCount: 3,
+    targetValue: 8,
+    weightGrams: 60_000,
+  });
+});
