@@ -16,6 +16,15 @@ export async function PUT(request: Request, context: { params: Promise<{ session
   if (!Number.isInteger(setIndex) || setIndex < 1 || setIndex > exercise.setCount) return Response.json({ error: "Invalid set index" }, { status: 400 });
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  const operationId = typeof body?.operationId === "string" && body.operationId.length > 0 && body.operationId.length <= 100 ? body.operationId : null;
+  if (body?.operationId !== undefined && !operationId) return Response.json({ error: "Invalid operation id" }, { status: 400 });
+  if (operationId) {
+    const prior = await prisma.sessionSetResult.findUnique({ where: { operationId }, select: { sessionExerciseId: true, setIndex: true, actualValue: true, actualWeightGrams: true, skipped: true } });
+    if (prior) {
+      if (prior.sessionExerciseId !== sessionExerciseId || prior.setIndex !== setIndex) return Response.json({ error: "Operation id was already used" }, { status: 409 });
+      return Response.json({ setResult: { setIndex: prior.setIndex, actualValue: prior.actualValue, actualWeightGrams: prior.actualWeightGrams, skipped: prior.skipped } });
+    }
+  }
   const skipped = body?.skipped === true;
   let actualValue: number | null = null;
   let actualWeightGrams: number | null = null;
@@ -29,7 +38,7 @@ export async function PUT(request: Request, context: { params: Promise<{ session
   }
   const setResult = await prisma.sessionSetResult.upsert({
     where: { sessionExerciseId_setIndex: { sessionExerciseId, setIndex } },
-    create: { sessionExerciseId, setIndex, actualValue, actualWeightGrams, skipped },
+    create: { sessionExerciseId, setIndex, actualValue, actualWeightGrams, skipped, operationId },
     update: { actualValue, actualWeightGrams, skipped },
     select: { setIndex: true, actualValue: true, actualWeightGrams: true, skipped: true },
   });

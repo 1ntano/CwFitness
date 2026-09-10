@@ -216,6 +216,7 @@ model SessionSetResult {
   actualValue       Int?
   actualWeightGrams Int?
   skipped           Boolean         @default(false)
+  operationId       String?         @unique
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
   sessionExercise   SessionExercise @relation(fields: [sessionExerciseId], references: [id], onDelete: Cascade)
