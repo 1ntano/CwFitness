@@ -12,7 +12,7 @@ export async function PUT(request: Request, context: { params: Promise<{ session
     include: { workoutSession: { select: { status: true } } },
   });
   if (!exercise) return Response.json({ error: "Session Exercise not found" }, { status: 404 });
-  if (exercise.workoutSession.status !== "ACTIVE") return Response.json({ error: "Session is not active" }, { status: 409 });
+  if (exercise.workoutSession.status !== "ACTIVE" && exercise.workoutSession.status !== "COMPLETED") return Response.json({ error: "Session is not editable" }, { status: 409 });
   if (!Number.isInteger(setIndex) || setIndex < 1 || setIndex > exercise.setCount) return Response.json({ error: "Invalid set index" }, { status: 400 });
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;

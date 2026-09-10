@@ -287,6 +287,14 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
     if (result !== undefined) setView("history");
   }
 
+  async function correctHistoricalSet(session: WorkoutHistorySession, exercise: WorkoutSession["exercises"][number], setIndex: number, input: { actualValue: number; actualWeight?: number } | null) {
+    const payload = input === null ? { skipped: true } : { actualValue: input.actualValue, ...(exercise.resistanceType === "WEIGHTED" ? { actualWeight: input.actualWeight, weightUnit: "kg" } : {}) };
+    await runMutation(
+      () => apiRequest(`/api/workout-sessions/${session.id}/exercises/${exercise.id}/sets/${setIndex}`, { method: "PUT", body: JSON.stringify(payload) }),
+      `第 ${setIndex} 组历史记录已修正。`,
+    );
+  }
+
   const allDays = plans.flatMap((plan) => plan.workoutDays.map((day) => ({ plan, day })));
   const suggested = allDays.find(({ day }) => day.suggestedWeekday === new Date().getDay())
     ?? allDays.find(({ day }) => day.plannedExercises.length > 0)
@@ -393,7 +401,7 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
                 />
               )}
 
-              {view === "history" && <WorkoutHistory workoutSessions={workoutSessions} />}
+              {view === "history" && <WorkoutHistory workoutSessions={workoutSessions} busy={busy} onCorrectSet={correctHistoricalSet} />}
 
               {view === "training" && session && (
                 <TrainingPanel

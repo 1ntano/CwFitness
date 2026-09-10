@@ -280,6 +280,12 @@ test('User starts one snapshotted Workout Session and completes its timed lifecy
     }],
     progressionSuggestion: false,
   }]);
+  const correction = await request(`/api/workout-sessions/${session.id}/exercises/${session.exercises[0].id}/sets/1`, {
+    method: 'PUT', headers: { cookie }, body: JSON.stringify({ actualValue: 6, actualWeight: 100, weightUnit: 'kg' }),
+  });
+  assert.equal(correction.status, 200);
+  const correctedHistory = await request('/api/workout-sessions', { headers: { cookie } });
+  assert.equal((await correctedHistory.json()).workoutSessions[0].exerciseResults[0].achievementRate, 25);
   assert.equal((await (await request('/api/workout-sessions/active', { headers: { cookie } })).json()).workoutSession, null);
 });
 
