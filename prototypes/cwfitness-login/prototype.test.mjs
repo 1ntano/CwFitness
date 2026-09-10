@@ -21,6 +21,9 @@ assert.ok(html.includes('prefers-contrast:more'), 'missing high-contrast handlin
 assert.ok(!html.includes('transition:all'), 'transition: all must not ship');
 assert.ok(!html.includes('scale(0)'), 'scale(0) entrance must not ship');
 assert.ok(!html.includes('ease-in'), 'ease-in UI animation must not ship');
+assert.match(html, /\.reveal\{[^}]*top:50%;[^}]*align-items:center;[^}]*transform:translateY\(-50%\)/, 'password reveal control must be vertically centered');
+assert.match(html, /\.split \.form-side\{[^}]*background:transparent/, 'split form side must allow the image transition through');
+assert.match(html, /--veil:linear-gradient\(90deg,[^;]*38%[^;]*62%[^;]*82%/, 'split backdrop must use a gradual multi-stop transition');
 
 const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)];
 assert.ok(scripts.length, 'prototype must include behavior script');
