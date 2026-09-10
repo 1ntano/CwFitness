@@ -121,7 +121,6 @@ model WorkoutDay {
   workoutPlan      WorkoutPlan       @relation(fields: [workoutPlanId], references: [id], onDelete: Cascade)
   plannedExercises PlannedExercise[]
   workoutSessions  WorkoutSession[]
-  sessionExercises SessionExercise[]
 
   @@index([workoutPlanId])
   @@map("workout_day")
@@ -142,6 +141,11 @@ model PlannedExercise {
   @@unique([workoutDayId, exerciseId])
   @@index([exerciseId])
   @@map("planned_exercise")
+}
+
+enum SessionExerciseSource {
+  PLANNED
+  ADDED
 }
 
 enum WorkoutSessionStatus {
@@ -179,7 +183,7 @@ model WorkoutSession {
 }
 
 model SessionExercise {
-  id               String         @id @default(cuid())
+  id               String                @id @default(cuid())
   workoutSessionId String
   exerciseId       String
   exerciseName     String
@@ -188,13 +192,29 @@ model SessionExercise {
   setCount         Int
   targetValue      Int
   weightGrams      Int?
-  createdAt        DateTime       @default(now())
-  workoutSession   WorkoutSession @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)
-  exercise         Exercise       @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
-  workoutDay       WorkoutDay?    @relation(fields: [workoutDayId], references: [id])
-  workoutDayId     String?
+  source           SessionExerciseSource @default(PLANNED)
+  removedAt        DateTime?
+  createdAt        DateTime              @default(now())
+  workoutSession   WorkoutSession        @relation(fields: [workoutSessionId], references: [id], onDelete: Cascade)
+  exercise         Exercise              @relation(fields: [exerciseId], references: [id], onDelete: Cascade)
+  setResults       SessionSetResult[]
 
   @@index([workoutSessionId])
   @@index([exerciseId])
   @@map("session_exercise")
+}
+
+model SessionSetResult {
+  id                String          @id @default(cuid())
+  sessionExerciseId String
+  setIndex          Int
+  actualValue       Int?
+  actualWeightGrams Int?
+  skipped           Boolean         @default(false)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  sessionExercise   SessionExercise @relation(fields: [sessionExerciseId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionExerciseId, setIndex])
+  @@map("session_set_result")
 }

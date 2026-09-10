@@ -252,3 +252,76 @@ test('User starts one snapshotted Workout Session and completes its timed lifecy
   assert.equal(completedSession.trainingTimeSeconds >= 0, true);
   assert.equal((await (await request('/api/workout-sessions/active', { headers: { cookie } })).json()).workoutSession, null);
 });
+
+test('User records sets and receives per-Exercise achievement without removed Exercises', async () => {
+  const cookie = await signUp('SetRecorder');
+  const plan = await createPlan(cookie, 'Scoring Plan');
+  const day = await createWorkoutDay(cookie, plan.id, 'Full Body');
+  const weighted = await createExercise(cookie, {
+    name: 'Deadlift', resistanceType: 'WEIGHTED', targetType: 'REPETITIONS',
+  });
+  await addPlannedExercise(cookie, plan.id, day.id, {
+    exerciseId: weighted.id, setCount: 2, targetValue: 10, weight: 100, weightUnit: 'kg',
+  });
+  const started = await request('/api/workout-sessions', {
+    method: 'POST', headers: { cookie },
+    body: JSON.stringify({ workoutDayId: day.id, timeZone: 'Asia/Shanghai' }),
+  });
+  assert.equal(started.status, 201);
+  const session = (await started.json()).workoutSession;
+  const sessionExercise = session.exercises[0];
+
+  const firstSet = await request(`/api/workout-sessions/${session.id}/exercises/${sessionExercise.id}/sets/1`, {
+    method: 'PUT', headers: { cookie },
+    body: JSON.stringify({ actualValue: 12, actualWeight: 110, weightUnit: 'kg' }),
+  });
+  assert.equal(firstSet.status, 200);
+
+  const paused = await request(`/api/workout-sessions/${session.id}/pause`, {
+    method: 'POST', headers: { cookie }, body: '{}',
+  });
+  assert.equal(paused.status, 200);
+  const blockedWhilePaused = await request(`/api/workout-sessions/${session.id}/exercises/${sessionExercise.id}/sets/2`, {
+    method: 'PUT', headers: { cookie }, body: JSON.stringify({ skipped: true }),
+  });
+  assert.equal(blockedWhilePaused.status, 409);
+  await request(`/api/workout-sessions/${session.id}/resume`, { method: 'POST', headers: { cookie }, body: '{}' });
+
+  const skippedSet = await request(`/api/workout-sessions/${session.id}/exercises/${sessionExercise.id}/sets/2`, {
+    method: 'PUT', headers: { cookie }, body: JSON.stringify({ skipped: true }),
+  });
+  assert.equal(skippedSet.status, 200);
+
+  const duration = await createExercise(cookie, {
+    name: 'Plank', resistanceType: 'BODYWEIGHT', targetType: 'DURATION',
+  });
+  const incompleteAdded = await request(`/api/workout-sessions/${session.id}/exercises`, {
+    method: 'POST', headers: { cookie },
+    body: JSON.stringify({ exerciseId: duration.id, setCount: 1 }),
+  });
+  assert.equal(incompleteAdded.status, 400);
+  const addedResponse = await request(`/api/workout-sessions/${session.id}/exercises`, {
+    method: 'POST', headers: { cookie },
+    body: JSON.stringify({ exerciseId: duration.id, setCount: 1, targetValue: 30 }),
+  });
+  assert.equal(addedResponse.status, 201);
+  const added = (await addedResponse.json()).sessionExercise;
+  assert.equal(added.source, 'ADDED');
+  const removed = await request(`/api/workout-sessions/${session.id}/exercises/${added.id}`, {
+    method: 'DELETE', headers: { cookie },
+  });
+  assert.equal(removed.status, 204);
+
+  const completed = await request(`/api/workout-sessions/${session.id}/complete`, {
+    method: 'POST', headers: { cookie }, body: '{}',
+  });
+  assert.equal(completed.status, 200);
+  assert.deepEqual((await completed.json()).exerciseResults, [{
+    sessionExerciseId: sessionExercise.id,
+    exerciseId: weighted.id,
+    exerciseName: 'Deadlift',
+    achievementRate: 50,
+    excessTargetValue: 2,
+    excessWeightGrams: 10_000,
+  }]);
+});
