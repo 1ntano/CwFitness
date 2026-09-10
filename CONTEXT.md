@@ -41,7 +41,7 @@ Whether an Exercise target is measured by repetitions (Repetitions) or elapsed s
 _Avoid_: Measurement mode, set type
 
 **Workout Session**:
-A dated performance of a Workout Day whose targets are fixed when the session starts, so later plan edits cannot change its historical results.
+A same-day performance of a Workout Day whose targets are fixed when the session starts, so they cannot be edited during training and later plan edits cannot change its historical results. Workout Sessions cannot be backdated.
 _Avoid_: Workout, activity log
 
 **Added Exercise**:
@@ -57,8 +57,16 @@ A planned set retained in a Workout Session but not performed; it contributes ze
 _Avoid_: Removed set, deleted set
 
 **In-progress Session**:
-A Workout Session that can still receive results and does not yet contribute to progress statistics. A user may have only one at a time in the MVP.
+A Workout Session that can still receive results and does not yet contribute to progress statistics. It is either active or paused, and a user may have only one at a time in the MVP.
 _Avoid_: Active workout, draft workout
+
+**Paused Session**:
+An In-progress Session temporarily stopped by the user; its paused intervals do not contribute to Training Time.
+_Avoid_: Abandoned session, stopped workout
+
+**Training Time**:
+The sum of a Workout Session's active intervals between starting and completing it, excluding every paused interval. Daily Training Time is the sum across Completed Sessions on that date.
+_Avoid_: Elapsed time, session span
 
 **Completed Session**:
 A Workout Session the user has explicitly finished; it contributes to progress statistics using its actual completion date.
