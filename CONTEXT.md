@@ -21,15 +21,11 @@ A named part of a Workout Plan containing the exercises intended for one trainin
 _Avoid_: Split, schedule
 
 **Exercise**:
-A user-created physical activity with a stable identity. Its latest name is used when displaying both current and historical results; the MVP has no built-in Exercise library.
+A user-created physical activity with a stable identity, a Resistance Type, and a Target Type, but no prescribed sets or target values. Its latest name is used when displaying both current and historical results; the MVP has no built-in Exercise library.
 _Avoid_: Movement, exercise name
 
-**Reference Media**:
-A local MP4 or GIF associated with an Exercise as a visual movement reference, previewed on hover and enlarged on request.
-_Avoid_: Tutorial, hosted video
-
 **Planned Exercise**:
-A prescribed Exercise within a Workout Day, with one uniform target shared by all of its planned sets.
+A use of an Exercise within one Workout Day, defining its number of sets and one uniform repetition or duration target and applicable weight shared by those sets.
 _Avoid_: Movement template, task
 
 **Resistance Type**:
@@ -79,6 +75,10 @@ _Avoid_: Plan achievement rate, completion score
 **Exercise Excess**:
 The amount by which one Exercise exceeds its prescribed target. It is shown separately from Exercise Achievement Rate and can support progression suggestions.
 _Avoid_: Excess volume, bonus completion
+
+**Permanent Exercise Deletion**:
+The irreversible removal of an Exercise from every Workout Plan and Workout Session, including all of its set results, trends, and Progression Suggestions; the surrounding sessions and their other exercises remain.
+_Avoid_: Archive exercise, remove from plan
 
 **Plan Progress**:
 The completed-session dates and per-Exercise trends derived only from Workout Sessions belonging to one Workout Plan; it has no aggregate plan achievement rate.
