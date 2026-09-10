@@ -98,10 +98,10 @@
     @keyframes view-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
     .cinematic { --accent: #c2db86; }
-    .cinematic .cinematic-nav { position: fixed; z-index: 10; top: 50%; left: 28px; transform: translateY(-50%); width: 180px; padding: 11px; border-radius: 28px; }
-    .cinematic .nav-btn { width: 100%; display: flex; align-items: center; gap: 11px; padding: 12px 14px; border-radius: 18px; color: var(--muted); background: transparent; text-align: left; }
-    .cinematic .nav-btn[data-active] { color: #121510; background: rgba(255,255,255,.9); font-weight: 750; }
-    .cinematic-main { padding: min(12vh,120px) clamp(28px,6vw,94px) 120px clamp(240px,21vw,330px); }
+    .cinematic .cinematic-nav { position: fixed; z-index: 10; top: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 2px; width: auto; padding: 4px; border-radius: 999px; background: rgba(10,10,10,.82); -webkit-backdrop-filter: blur(12px) saturate(1.4); backdrop-filter: blur(12px) saturate(1.4); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08),0 8px 24px rgba(0,0,0,.24),0 2px 6px rgba(0,0,0,.12); }
+    .cinematic .nav-btn { width: auto; height: 28px; display: flex; align-items: center; gap: 7px; padding: 0 13px; border-radius: 999px; color: rgba(255,255,255,.55); background: transparent; text-align: center; font-size: 13px; }
+    .cinematic .nav-btn[data-active] { color: #fff; background: rgba(255,255,255,.12); font-weight: 700; }
+    .cinematic-main { max-width: 1210px; margin: 0 auto; padding: min(12vh,120px) clamp(28px,6vw,94px) 120px; }
     .cinematic-hero { min-height: 47vh; display: flex; flex-direction: column; justify-content: flex-end; max-width: 820px; }
     .stats-strip { display: grid; grid-template-columns: repeat(3,minmax(120px,1fr)); gap: 10px; max-width: 640px; margin-top: 30px; }
     .stat { padding: 18px; border-radius: 22px; background: rgba(15,17,18,.46); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
@@ -276,8 +276,8 @@
       .set-row:hover { background-color: rgba(255,255,255,.09); }
     }
     @media (max-width: 860px) {
-      .cinematic .cinematic-nav { top: auto; right: 18px; bottom: 76px; left: 18px; width: auto; transform: none; display: flex; border-radius: 999px; }
-      .cinematic .cinematic-nav .nav-btn { justify-content: center; padding: 11px 8px; }
+      .cinematic .cinematic-nav { top: 18px; right: auto; bottom: auto; left: 50%; width: auto; transform: translateX(-50%); display: flex; border-radius: 999px; }
+      .cinematic .cinematic-nav .nav-btn { justify-content: center; padding: 0 10px; }
       .cinematic .cinematic-nav .nav-btn span:first-child { display: none; }
       .cinematic-main { padding: 70px 22px 150px; }
       .cinematic-hero { min-height: 50vh; }
@@ -316,14 +316,6 @@
 <body>
   <main id="stage"></main>
 
-  <nav class="proto-picker" data-position="top" aria-label="Prototype variants">
-    <span class="proto-picker-highlight" aria-hidden="true"></span>
-    <button class="proto-picker-item" data-active aria-current="true">Cinematic</button>
-    <button class="proto-picker-item">Glass Console</button>
-    <button class="proto-picker-item">Focus Rail</button>
-    <span class="proto-picker-divider" aria-hidden="true"></span>
-    <button class="proto-picker-item proto-picker-replay" aria-label="Replay animation (R)">↻</button>
-  </nav>
 
   <template id="variant-cinematic">
     <div class="app cinematic" data-app>
@@ -355,91 +347,21 @@
     </div>
   </template>
 
-  <template id="variant-console">
-    <div class="app console" data-app>
-      <header class="topbar"><div class="brand"><span class="brand-mark"></span>CwFitness</div><button class="avatar" data-settings aria-label="打开设置">林</button></header>
-      <div class="console-shell">
-        <nav class="console-side glass" aria-label="主导航">
-          <div class="console-profile"><span class="avatar">林</span><div><strong>林默</strong><div class="meta">晚上好</div></div></div>
-          <button class="nav-btn" data-nav="home" data-active>⌂　Home</button>
-          <button class="nav-btn" data-nav="plans">▤　Plans</button>
-          <button class="nav-btn" data-nav="progress">↗　Progress</button>
-        </nav>
-        <section class="view console-main" data-view="home" data-visible>
-          <div class="console-hero">
-            <p class="eyebrow">今日训练</p><h1>Push Day</h1><p class="lede">下一组：杠铃卧推 · 3 × 10 · 60.0 kg</p>
-            <div class="actions"><button class="btn btn-primary" data-start>开始训练</button><button class="btn btn-secondary" data-nav="plans">编辑计划</button></div>
-          </div>
-          <div class="console-grid">
-            <article class="console-card"><p class="eyebrow">训练时间</p><h2><span class="value">186</span> 分钟</h2><div class="bars" aria-label="最近七天训练分钟"><i style="--h:24%"></i><i style="--h:70%"></i><i style="--h:32%"></i><i style="--h:88%"></i><i style="--h:18%"></i><i style="--h:62%"></i><i style="--h:42%"></i></div></article>
-            <article class="console-card"><p class="eyebrow">进阶提示</p><h3>卧推稳定超额</h3><p class="meta">最近 3 次均达标，可考虑增加重量。</p></article>
-            <article class="console-card"><p class="eyebrow">下一训练</p><h3>Pull Day</h3><p class="meta">周三 · 4 个动作</p><button class="btn btn-secondary" data-toast="已打开 Pull Day 预览">预览</button></article>
-          </div>
-        </section>
-        <section class="view console-main content-page" data-view="plans"></section>
-        <section class="view console-main content-page" data-view="progress"></section>
-      </div>
-    </div>
-  </template>
 
-  <template id="variant-focus">
-    <div class="app focus" data-app>
-      <header class="topbar"><div class="brand"><span class="brand-mark"></span>CwFitness</div><nav class="focus-nav" aria-label="主导航"><button class="nav-btn" data-nav="home" data-active>Home</button><button class="nav-btn" data-nav="plans">Plans</button><button class="nav-btn" data-nav="progress">Progress</button></nav><button class="avatar" data-settings aria-label="打开设置">林</button></header>
-      <section class="view" data-view="home" data-visible>
-        <div class="focus-main">
-          <div class="focus-copy"><p class="eyebrow">9 月 9 日 · 今日训练</p><h1>选择，然后<br>专注完成。</h1><p class="lede">不追逐综合分数。每一次训练，只和这个动作原本的目标比较。</p></div>
-          <div class="focus-rail">
-            <button class="rail-card" data-featured data-start><span class="eyebrow">建议 · 今天</span><h3>Push Day</h3><p class="meta">5 个动作 · 预计 52 分钟</p></button>
-            <button class="rail-card" data-toast="Pull Day 已选中"><span class="eyebrow">周三</span><h3>Pull Day</h3><p class="meta">4 个动作 · 预计 48 分钟</p></button>
-            <button class="rail-card" data-toast="Leg Day 已选中"><span class="eyebrow">周五</span><h3>Leg Day</h3><p class="meta">5 个动作 · 预计 58 分钟</p></button>
-          </div>
-        </div>
-      </section>
-      <section class="view content-page" data-view="plans"></section>
-      <section class="view content-page" data-view="progress"></section>
-    </div>
-  </template>
 
   <script>
     const stage = document.getElementById('stage');
-    const picker = document.querySelector('.proto-picker');
-    const highlight = picker.querySelector('.proto-picker-highlight');
-    const items = [...picker.querySelectorAll('.proto-picker-item:not(.proto-picker-replay)')];
-    const replay = picker.querySelector('.proto-picker-replay');
-    const templateIds = ['variant-cinematic','variant-console','variant-focus'];
-    let current = 0;
     let elapsed = 0;
     let timerId = null;
     let paused = false;
 
-    function moveHighlight() {
-      const el = items[current];
-      highlight.style.width = el.offsetWidth + 'px';
-      highlight.style.transform = `translateX(${el.offsetLeft}px)`;
-    }
-
-    function mount(i) {
+    function mount() {
       clearInterval(timerId);
       stage.innerHTML = '';
       requestAnimationFrame(() => {
-        stage.append(document.getElementById(templateIds[i]).content.cloneNode(true));
+        stage.append(document.getElementById('variant-cinematic').content.cloneNode(true));
         hydrateViews();
       });
-    }
-
-    function setActive(i) {
-      if (i < 0 || i >= templateIds.length) return;
-      current = i;
-      items.forEach((el, j) => {
-        el.toggleAttribute('data-active', j === i);
-        if (j === i) el.setAttribute('aria-current', 'true');
-        else el.removeAttribute('aria-current');
-      });
-      moveHighlight();
-      const url = new URL(location);
-      url.searchParams.set('v', i + 1);
-      history.replaceState(null, '', url);
-      mount(i);
     }
 
     function plansMarkup() {
@@ -518,10 +440,6 @@
       setTimeout(() => toast.remove(), 1900);
     }
 
-    items.forEach((el, i) => el.addEventListener('click', () => setActive(i)));
-    replay.addEventListener('click', () => mount(current));
-    window.addEventListener('resize', moveHighlight);
-
     document.addEventListener('click', (event) => {
       const nav = event.target.closest('[data-nav]');
       if (nav) {
@@ -562,20 +480,10 @@
 
     document.addEventListener('keydown', (e) => {
       if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === 'Escape') {
-        document.querySelector('.settings-layer, .result-layer')?.remove();
-        return;
-      }
-      const num = parseInt(e.key, 10);
-      if (num >= 1 && num <= templateIds.length) setActive(num - 1);
-      else if (e.key === 'ArrowRight') setActive((current + 1) % templateIds.length);
-      else if (e.key === 'ArrowLeft') setActive((current - 1 + templateIds.length) % templateIds.length);
-      else if (e.key === 'r' || e.key === 'R') mount(current);
+      if (e.key === 'Escape') document.querySelector('.settings-layer, .result-layer')?.remove();
     });
 
-    setActive((parseInt(new URLSearchParams(location.search).get('v'), 10) || 1) - 1);
-    requestAnimationFrame(() => requestAnimationFrame(() => picker.setAttribute('data-ready', '')));
+    mount();
   </script>
 </body>
 </html>
