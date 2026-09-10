@@ -1,0 +1,61 @@
+import { spawn } from 'node:child_process';
+import process from 'node:process';
+
+const root = new URL('../', import.meta.url);
+const databaseUrl = 'postgres://postgres:postgres@127.0.0.1:51214/template1?sslmode=disable';
+const baseUrl = 'http://127.0.0.1:3100';
+const env = {
+  ...process.env,
+  DATABASE_URL: databaseUrl,
+  BETTER_AUTH_SECRET: 'cwfitness-integration-test-secret-not-for-production',
+  BETTER_AUTH_URL: baseUrl,
+  TEST_BASE_URL: baseUrl,
+};
+
+function run(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: root,
+      env,
+      stdio: 'inherit',
+      ...options,
+    });
+    child.once('error', reject);
+    child.once('exit', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} exited with code ${code}`));
+    });
+  });
+}
+
+async function waitForServer() {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(`${baseUrl}/api/plans`);
+      if (response.status === 401) return;
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+  throw new Error('Next.js test server did not become ready within 30 seconds');
+}
+
+const node = process.execPath;
+const prismaCli = new URL('../node_modules/prisma/build/index.js', import.meta.url).pathname.slice(1);
+const nextCli = new URL('../node_modules/next/dist/bin/next', import.meta.url).pathname.slice(1);
+
+await run(node, [prismaCli, 'dev', '--name', 'cwfitness-test', '--port', '51213', '--db-port', '51214', '--shadow-db-port', '51215', '--detach']);
+await run(node, [prismaCli, 'migrate', 'deploy']);
+
+const server = spawn(node, [nextCli, 'dev', '-H', '127.0.0.1', '-p', '3100'], {
+  cwd: root,
+  env,
+  stdio: 'inherit',
+});
+
+try {
+  await waitForServer();
+  await run(node, ['--test', 'tests/plans-api.test.mjs']);
+} finally {
+  server.kill();
+}
