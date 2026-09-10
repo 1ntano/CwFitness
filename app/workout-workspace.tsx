@@ -6,6 +6,7 @@ import { PlanEditor, type PlannedExerciseInput } from "./plan-editor";
 import { TrainingPanel } from "./training-panel";
 import { WorkoutHistory } from "./workout-history";
 import { SettingsPanel } from "./settings-panel";
+import { enqueueSet, queuedSets, removeQueuedSet } from "./workout-outbox";
 import type { Exercise, ExerciseProgress, Plan, PlannedExercise, WorkoutDay, WorkoutHistorySession, WorkoutSession, WorkspaceView } from "./workout-types";
 
 type WorkoutWorkspaceProps = {
@@ -92,6 +93,18 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
     const timer = window.setInterval(heartbeat, 60_000);
     return () => window.clearInterval(timer);
   }, [loadData, session]);
+
+  useEffect(() => {
+    const flush = async () => {
+      for (const item of await queuedSets()) {
+        try { await apiRequest(item.path, { method: "PUT", body: item.body }); await removeQueuedSet(item.id); } catch { break; }
+      }
+      await loadData();
+    };
+    window.addEventListener("online", flush);
+    if (navigator.onLine) void flush();
+    return () => window.removeEventListener("online", flush);
+  }, [loadData]);
 
   async function runMutation<T>(action: () => Promise<T>, successMessage: string) {
     setBusy(true);
@@ -251,10 +264,18 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
             ? { actualWeight: input.actualWeight, weightUnit: settings.weightUnit }
             : {}),
         };
+    const path = `/api/workout-sessions/${session.id}/exercises/${exercise.id}/sets/${setIndex}`;
+    const operationId = crypto.randomUUID();
+    const body = JSON.stringify({ ...payload, operationId });
+    if (!navigator.onLine) {
+      await enqueueSet({ id: operationId, path, body });
+      setNotice(`第 ${setIndex} 组已离线保存，恢复网络后会自动同步。`);
+      return;
+    }
     await runMutation(
-      () => apiRequest(`/api/workout-sessions/${session.id}/exercises/${exercise.id}/sets/${setIndex}`, {
+      () => apiRequest(path, {
         method: "PUT",
-        body: JSON.stringify(payload),
+        body,
       }),
       input === null ? `第 ${setIndex} 组已跳过。` : `第 ${setIndex} 组已记录。`,
     );
