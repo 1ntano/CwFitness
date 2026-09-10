@@ -12,6 +12,10 @@ _Avoid_: Account, athlete
 A user-owned, reusable weekly fitness plan whose progress is measured independently from the user's other plans.
 _Avoid_: Routine, program
 
+**Archived Plan**:
+A Workout Plan that cannot start new Workout Sessions but retains all historical results and may be restored.
+_Avoid_: Deleted plan, inactive routine
+
 **Workout Day**:
 A named part of a Workout Plan containing the exercises intended for one training occasion. It may have a suggested weekday, while the user may perform it earlier or later.
 _Avoid_: Split, schedule
@@ -37,7 +41,7 @@ A dated performance of a Workout Day whose targets are fixed when the session st
 _Avoid_: Workout, activity log
 
 **Added Exercise**:
-An exercise added while performing a Workout Session that was not originally part of the selected Workout Day. It must have target sets, repetitions or duration, and weight when applicable before being recorded.
+An exercise added while performing a Workout Session that was not originally part of the selected Workout Day. It must have complete targets before being recorded and may also be saved to the Workout Day for future sessions.
 _Avoid_: Temporary exercise, ad hoc movement
 
 **Removed Exercise**:
@@ -61,7 +65,7 @@ A retained Workout Session the user chose not to finish; it does not contribute 
 _Avoid_: Deleted workout, failed workout
 
 **Exercise Achievement Rate**:
-How closely the actual result for one Exercise meets its prescribed target in a Workout Session, capped at 100%; skipped sets contribute zero.
+The average of one Exercise's planned-set results in a Workout Session, capped at 100%. Each set uses the lower completion ratio between its Target Type and, for Weighted exercises, its prescribed weight; skipped sets contribute zero.
 _Avoid_: Plan achievement rate, completion score
 
 **Exercise Excess**:
@@ -69,5 +73,9 @@ The amount by which one Exercise exceeds its prescribed target. It is shown sepa
 _Avoid_: Excess volume, bonus completion
 
 **Plan Progress**:
-The dated, per-Exercise history and trends derived only from Workout Sessions belonging to one Workout Plan.
+The completed-session dates and per-Exercise trends derived only from Workout Sessions belonging to one Workout Plan; it has no aggregate plan achievement rate.
 _Avoid_: User progress, global statistics
+
+**Progression Suggestion**:
+An informational prompt shown when the same Exercise in one Workout Plan reaches 100% in three consecutive Completed Sessions and exceeds its target in at least two of them. It never changes the Workout Plan or requires an accept-or-dismiss response.
+_Avoid_: Automatic progression, recommendation action
