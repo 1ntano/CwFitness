@@ -20,6 +20,7 @@ type PlanEditorProps = {
   onSelectPlan: (planId: string) => void;
   onCreatePlan: (name: string) => Promise<void>;
   onRenamePlan: (plan: Plan, name: string) => Promise<void>;
+  onSetArchived: (plan: Plan, archived: boolean) => Promise<void>;
   onCreateDay: (plan: Plan, name: string, suggestedWeekday: number | null) => Promise<void>;
   onUpdateDay: (plan: Plan, day: WorkoutDay, name: string, suggestedWeekday: number | null) => Promise<void>;
   onDeleteDay: (plan: Plan, day: WorkoutDay) => Promise<void>;
@@ -52,6 +53,7 @@ export function PlanEditor(props: PlanEditorProps) {
     onSelectPlan,
     onCreatePlan,
     onRenamePlan,
+    onSetArchived,
     onCreateDay,
     onUpdateDay,
     onDeleteDay,
@@ -160,6 +162,7 @@ export function PlanEditor(props: PlanEditorProps) {
                     <button className="action-button" type="submit" disabled={busy}>保存</button>
                   </form>
                 </details>
+                <button className="action-button quiet" type="button" disabled={busy} onClick={() => onSetArchived(selectedPlan, selectedPlan.archivedAt === null)}>{selectedPlan.archivedAt === null ? "归档计划" : "恢复计划"}</button>
               </div>
 
               <form className="inline-create-form compact" onSubmit={submitDay}>
@@ -204,8 +207,8 @@ export function PlanEditor(props: PlanEditorProps) {
                           <h3>{selectedDay.name}</h3>
                           <p>{selectedDay.plannedExercises.length > 0 ? `${selectedDay.plannedExercises.length} 个动作` : "尚未安排动作"}</p>
                         </div>
-                        <button className="action-button primary" type="button" disabled={busy || selectedDay.plannedExercises.length === 0} onClick={() => onStartWorkout(selectedDay)}>
-                          开始训练
+                        <button className="action-button primary" type="button" disabled={busy || selectedDay.plannedExercises.length === 0 || selectedPlan.archivedAt !== null} onClick={() => onStartWorkout(selectedDay)}>
+                          {selectedPlan.archivedAt === null ? "开始训练" : "计划已归档"}
                         </button>
                       </div>
 

@@ -55,6 +55,7 @@ export const workoutSessionSelect = {
   pausedAt: true,
   completedAt: true,
   trainingTimeSeconds: true,
+  lastHeartbeatAt: true,
   exercises: {
     orderBy: { createdAt: "asc" as const },
     select: {

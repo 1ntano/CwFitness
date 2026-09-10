@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   if (existing) return Response.json({ error: "An In-progress Session already exists" }, { status: 409 });
 
   const day = await prisma.workoutDay.findFirst({
-    where: { id: workoutDayId, workoutPlan: { userId: session.user.id } },
+    where: { id: workoutDayId, workoutPlan: { userId: session.user.id, archivedAt: null } },
     include: { workoutPlan: true, plannedExercises: { orderBy: { createdAt: "asc" }, include: { exercise: true } } },
   });
   if (!day) return Response.json({ error: "Workout Day not found" }, { status: 404 });
@@ -63,6 +63,7 @@ export async function POST(request: Request) {
         timeZone,
         localStartDate,
         startedAt: now,
+        lastHeartbeatAt: now,
         exercises: { create: day.plannedExercises.map((planned) => ({
           exerciseId: planned.exerciseId,
           exerciseName: planned.exercise.name,

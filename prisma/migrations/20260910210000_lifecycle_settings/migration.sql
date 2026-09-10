@@ -1,0 +1,4 @@
+ALTER TABLE "user" ADD COLUMN "timeZone" TEXT NOT NULL DEFAULT 'UTC';
+ALTER TABLE "user" ADD COLUMN "weightUnit" TEXT NOT NULL DEFAULT 'kg';
+ALTER TABLE "workout_plan" ADD COLUMN "archivedAt" TIMESTAMP(3);
+ALTER TABLE "workout_session" ADD COLUMN "lastHeartbeatAt" TIMESTAMP(3);

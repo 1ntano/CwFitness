@@ -27,6 +27,7 @@ export type WorkoutDay = {
 export type Plan = {
   id: string;
   name: string;
+  archivedAt: string | null;
   workoutDays: WorkoutDay[];
 };
 

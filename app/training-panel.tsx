@@ -25,6 +25,7 @@ type TrainingPanelProps = {
   onPause: () => Promise<void>;
   onResume: () => Promise<void>;
   onComplete: () => Promise<void>;
+  onAbandon: () => Promise<void>;
 };
 
 function targetText(exercise: SessionExercise) {
@@ -43,7 +44,7 @@ function resultText(exercise: SessionExercise, result: SetResult | undefined) {
   return metric + weight;
 }
 
-export function TrainingPanel({ session, exercises: availableExercises, busy, onRecordSet, onAddExercise, onRemoveExercise, onPause, onResume, onComplete }: TrainingPanelProps) {
+export function TrainingPanel({ session, exercises: availableExercises, busy, onRecordSet, onAddExercise, onRemoveExercise, onPause, onResume, onComplete, onAbandon }: TrainingPanelProps) {
   const exercises = session.exercises.filter((exercise) => exercise.removedAt === null);
   const plannedSetCount = exercises.reduce((total, exercise) => total + exercise.setCount, 0);
   const recordedSetCount = exercises.reduce((total, exercise) => total + exercise.setResults.length, 0);
@@ -68,6 +69,7 @@ export function TrainingPanel({ session, exercises: availableExercises, busy, on
             {isPaused ? "继续训练" : "挂起"}
           </button>
           <button className="action-button primary" type="button" disabled={busy} onClick={completeSession}>结束训练</button>
+          <button className="action-button quiet danger" type="button" disabled={busy} onClick={() => { if (window.confirm("放弃本次训练？已记录内容会保留，但不计入进展。")) void onAbandon(); }}>放弃</button>
         </div>
       </header>
 

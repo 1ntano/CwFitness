@@ -13,6 +13,8 @@ model User {
   email           String           @unique
   emailVerified   Boolean          @default(false)
   image           String?
+  timeZone        String           @default("UTC")
+  weightUnit      String           @default("kg")
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   sessions        Session[]
@@ -77,6 +79,7 @@ model WorkoutPlan {
   userId          String
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+  archivedAt      DateTime?
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   workoutDays     WorkoutDay[]
   workoutSessions WorkoutSession[]
@@ -170,6 +173,7 @@ model WorkoutSession {
   pausedDurationMs    Int                  @default(0)
   completedAt         DateTime?
   trainingTimeSeconds Int?
+  lastHeartbeatAt     DateTime?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)

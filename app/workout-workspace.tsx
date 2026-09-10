@@ -76,6 +76,14 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
     };
   }, [loadData]);
 
+  useEffect(() => {
+    if (!session || session.status !== "ACTIVE") return;
+    const heartbeat = () => { void apiRequest(`/api/workout-sessions/${session.id}/heartbeat`, { method: "POST", body: "{}" }); };
+    heartbeat();
+    const timer = window.setInterval(heartbeat, 60_000);
+    return () => window.clearInterval(timer);
+  }, [session]);
+
   async function runMutation<T>(action: () => Promise<T>, successMessage: string) {
     setBusy(true);
     setNotice("");
@@ -243,6 +251,10 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
     );
   }
 
+  async function setPlanArchived(plan: Plan, archived: boolean) {
+    await runMutation(() => apiRequest(`/api/plans/${plan.id}`, { method: "PATCH", body: JSON.stringify({ archived }) }), archived ? "计划已归档。" : "计划已恢复。");
+  }
+
   async function addSessionExercise(input: { exerciseId: string; setCount: number; targetValue: number; weight?: number }) {
     if (!session) return;
     await runMutation(
@@ -285,6 +297,12 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
       "训练已完成。",
     );
     if (result !== undefined) setView("history");
+  }
+
+  async function abandonWorkout() {
+    if (!session) return;
+    const result = await runMutation(() => apiRequest(`/api/workout-sessions/${session.id}/abandon`, { method: "POST", body: "{}" }), "训练已放弃，不计入进展。");
+    if (result !== undefined) setView("today");
   }
 
   async function correctHistoricalSet(session: WorkoutHistorySession, exercise: WorkoutSession["exercises"][number], setIndex: number, input: { actualValue: number; actualWeight?: number } | null) {
@@ -381,6 +399,7 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
                   onSelectPlan={setSelectedPlanId}
                   onCreatePlan={createPlan}
                   onRenamePlan={renamePlan}
+                  onSetArchived={setPlanArchived}
                   onCreateDay={createDay}
                   onUpdateDay={updateDay}
                   onDeleteDay={deleteDay}
@@ -414,6 +433,7 @@ export function WorkoutWorkspace({ user, onSignOut }: WorkoutWorkspaceProps) {
                   onPause={pauseWorkout}
                   onResume={resumeWorkout}
                   onComplete={completeWorkout}
+                  onAbandon={abandonWorkout}
                 />
               )}
             </>

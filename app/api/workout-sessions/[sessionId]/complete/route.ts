@@ -12,7 +12,8 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   const completedAt = new Date();
   const finalPauseMs = current.status === "PAUSED" && current.pausedAt ? Math.max(0, completedAt.getTime() - current.pausedAt.getTime()) : 0;
   const pausedDurationMs = current.pausedDurationMs + finalPauseMs;
-  const trainingTimeSeconds = Math.max(0, Math.floor((completedAt.getTime() - current.startedAt.getTime() - pausedDurationMs) / 1000));
+  const inactiveAfterHeartbeatMs = current.lastHeartbeatAt ? Math.max(0, completedAt.getTime() - current.lastHeartbeatAt.getTime() - 300_000) : 0;
+  const trainingTimeSeconds = Math.max(0, Math.floor((completedAt.getTime() - current.startedAt.getTime() - pausedDurationMs - inactiveAfterHeartbeatMs) / 1000));
 
   const scoredExercises = await prisma.sessionExercise.findMany({
     where: { workoutSessionId: sessionId, removedAt: null },
