@@ -39,19 +39,19 @@ export async function POST(request: Request) {
   const timeZone = typeof body?.timeZone === "string" ? body.timeZone : "";
   const now = new Date();
   const localStartDate = localDate(now, timeZone);
-  if (!workoutDayId || !localStartDate) return Response.json({ error: "Invalid Workout Session" }, { status: 400 });
+  if (!workoutDayId || !localStartDate) return Response.json({ error: "训练参数无效" }, { status: 400 });
 
   const existing = await prisma.workoutSession.findFirst({
     where: { userId: session.user.id, status: { in: ["ACTIVE", "PAUSED"] } }, select: { id: true },
   });
-  if (existing) return Response.json({ error: "An In-progress Session already exists" }, { status: 409 });
+  if (existing) return Response.json({ error: "已有一个未结束的训练，请先继续或结束该训练。" }, { status: 409 });
 
   const day = await prisma.workoutDay.findFirst({
     where: { id: workoutDayId, workoutPlan: { userId: session.user.id, archivedAt: null } },
     include: { workoutPlan: true, plannedExercises: { orderBy: { createdAt: "asc" }, include: { exercise: true } } },
   });
-  if (!day) return Response.json({ error: "Workout Day not found" }, { status: 404 });
-  if (day.plannedExercises.length === 0) return Response.json({ error: "Workout Day has no Planned Exercises" }, { status: 409 });
+  if (!day) return Response.json({ error: "找不到训练日" }, { status: 404 });
+  if (day.plannedExercises.length === 0) return Response.json({ error: "这个训练日还没有安排动作" }, { status: 409 });
 
   try {
     const workoutSession = await prisma.workoutSession.create({
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
     return Response.json({ workoutSession }, { status: 201 });
   } catch (error) {
     if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") {
-      return Response.json({ error: "An In-progress Session already exists" }, { status: 409 });
+      return Response.json({ error: "已有一个未结束的训练，请先继续或结束该训练。" }, { status: 409 });
     }
     throw error;
   }

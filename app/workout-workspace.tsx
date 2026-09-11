@@ -7,6 +7,7 @@ import type { PlannedExerciseInput } from "./plan-editor";
 import { TrainingPanel } from "./training-panel";
 import { WorkoutHistory } from "./workout-history";
 import { SettingsPanel } from "./settings-panel";
+import { ToolsPanel } from "./tools-panel";
 import {
   applySessionMutation,
   clearWorkoutSessionDraft,
@@ -392,12 +393,13 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
     setBusy(true);
     setNotice("");
     try {
-      await apiRequest<{ workoutSession: WorkoutSession }>("/api/workout-sessions", {
+      const started = await apiRequest<{ workoutSession: WorkoutSession }>("/api/workout-sessions", {
         method: "POST",
         body: JSON.stringify({ workoutDayId: day.id, timeZone: settings.timeZone }),
       });
-      await loadData();
+      setSession(started.workoutSession);
       setView("training");
+      await loadData();
       setNotice("训练已开始，目标已经锁定。")
     } catch (error) {
       setNotice(errorText(error));
@@ -603,6 +605,7 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
             <button type="button" aria-current={view === "today" ? "page" : undefined} onClick={() => setView("today")}>今日</button>
             <button type="button" disabled={offline} aria-current={view === "exercises" ? "page" : undefined} onClick={() => setView("exercises")}>动作</button>
             <button type="button" disabled={offline} aria-current={view === "plans" ? "page" : undefined} onClick={() => setView("plans")}>计划</button>
+            <button type="button" disabled={offline} aria-current={view === "tools" ? "page" : undefined} onClick={() => setView("tools")}>工具</button>
             <button type="button" disabled={offline} aria-current={view === "history" ? "page" : undefined} onClick={() => setView("history")}>历史</button>
             <button type="button" disabled={offline} aria-current={view === "settings" ? "page" : undefined} onClick={() => setView("settings")}>设置</button>
             {session && <button type="button" aria-current={view === "training" ? "page" : undefined} onClick={() => setView("training")}>训练</button>}
@@ -613,16 +616,16 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
           </div>
         </header>
 
-        {notice && <p className={`workspace-notice ${notice.includes("失败") ? "error" : ""}`} role="status">{notice}</p>}
-        {pendingSync > 0 && <p className="workspace-notice recovery" role="status">{pendingSync} 项训练记录正在等待同步。</p>}
+        {notice && <p key={notice} className={`workspace-notice ${notice.includes("失败") ? "error" : ""}`} role="status">{notice}</p>}
+        {pendingSync > 0 && <p key={`pending-${pendingSync}`} className="workspace-notice recovery" role="status">{pendingSync} 项训练记录正在等待同步。</p>}
         {syncError && (
-          <div className="workspace-notice error" role="alert">
+          <div key={syncError} className="workspace-notice error" role="alert">
             <span>{syncError}</span>
             <button className="text-button" type="button" onClick={() => void loadData()}>重试同步</button>
           </div>
         )}
         {conflict && (
-          <div className="workspace-notice error" role="alert">
+          <div key={conflict.message} className="workspace-notice error" role="alert">
             <span>{conflict.message}。请刷新后再编辑。</span>
             <button className="text-button" type="button" onClick={() => void loadData()}>刷新最新数据</button>
           </div>
@@ -702,6 +705,7 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
                 />
               )}
 
+              {view === "tools" && <ToolsPanel />}
               {view === "history" && <WorkoutHistory workoutSessions={workoutSessions} busy={busy} weightUnit={settings.weightUnit} onCorrectSet={correctHistoricalSet} onDeleteSession={deleteHistoricalSession} />}
               {view === "settings" && <SettingsPanel settings={settings} busy={busy} onSave={saveSettings} onDelete={deleteAccount} />}
 
