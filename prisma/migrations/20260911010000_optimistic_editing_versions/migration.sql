@@ -1,0 +1,6 @@
+ALTER TABLE "workout_plan" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "exercise" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "workout_day" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "planned_exercise" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "workout_session" ADD COLUMN "version" INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE "workout_session" ADD COLUMN "editingDeviceId" TEXT;

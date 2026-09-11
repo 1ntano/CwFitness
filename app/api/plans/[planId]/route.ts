@@ -9,14 +9,39 @@ export async function PATCH(request: Request, context: { params: Promise<{ planI
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const name = typeof body?.name === "string" ? body.name.trim() : undefined;
   const archived = typeof body?.archived === "boolean" ? body.archived : undefined;
-  if ((name !== undefined && (!name || name.length > 80)) || (name === undefined && archived === undefined)) {
+  const version = body?.version;
+  if (!Number.isInteger(version) || Number(version) < 1 || (name !== undefined && (!name || name.length > 80)) || (name === undefined && archived === undefined)) {
     return Response.json({ error: "Plan name must contain 1 to 80 characters" }, { status: 400 });
   }
 
-  const result = await prisma.workoutPlan.updateMany({
+  const current = await prisma.workoutPlan.findFirst({
     where: { id: planId, userId: session.user.id },
-    data: { ...(name === undefined ? {} : { name }), ...(archived === undefined ? {} : { archivedAt: archived ? new Date() : null }) },
+    select: { id: true, name: true, archivedAt: true, version: true },
   });
-  if (result.count === 0) return Response.json({ error: "Workout Plan not found" }, { status: 404 });
-  return Response.json({ plan: { id: planId, name, archived } });
+  if (!current) return Response.json({ error: "Workout Plan not found" }, { status: 404 });
+  if (current.version !== version) {
+    return Response.json({ error: "Workout Plan changed on another device", code: "VERSION_CONFLICT", current }, { status: 409 });
+  }
+
+  const result = await prisma.workoutPlan.updateMany({
+    where: { id: planId, userId: session.user.id, version: Number(version) },
+    data: {
+      ...(name === undefined ? {} : { name }),
+      ...(archived === undefined ? {} : { archivedAt: archived ? new Date() : null }),
+      version: { increment: 1 },
+    },
+  });
+  if (result.count === 0) {
+    const latest = await prisma.workoutPlan.findUniqueOrThrow({
+      where: { id: planId },
+      select: { id: true, name: true, archivedAt: true, version: true },
+    });
+    return Response.json({ error: "Workout Plan changed on another device", code: "VERSION_CONFLICT", current: latest }, { status: 409 });
+  }
+
+  const plan = await prisma.workoutPlan.findUniqueOrThrow({
+    where: { id: planId },
+    select: { id: true, name: true, archivedAt: true, version: true },
+  });
+  return Response.json({ plan });
 }

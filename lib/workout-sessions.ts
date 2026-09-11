@@ -10,6 +10,8 @@ export const workoutSessionSelect = {
   completedAt: true,
   trainingTimeSeconds: true,
   lastHeartbeatAt: true,
+  version: true,
+  editingDeviceId: true,
   exercises: {
     orderBy: { createdAt: "asc" as const },
     select: {

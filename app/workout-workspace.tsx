@@ -11,9 +11,23 @@ import type { Exercise, ExerciseProgress, Plan, PlannedExercise, WorkoutDay, Wor
 
 type WorkoutWorkspaceProps = {
   user: { name: string; email: string };
+  deviceId: string;
   onSignOut: () => Promise<void>;
   onAccountDeleted: () => void;
 };
+
+class ApiError extends Error {
+  status: number;
+  code?: string;
+  current?: unknown;
+
+  constructor(message: string, status: number, body: { code?: string; current?: unknown } | null) {
+    super(message);
+    this.status = status;
+    this.code = body?.code;
+    this.current = body?.current;
+  }
+}
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -24,8 +38,8 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? "操作没有完成，请稍后重试。");
+    const body = (await response.json().catch(() => null)) as { error?: string; code?: string; current?: unknown } | null;
+    throw new ApiError(body?.error ?? "操作没有完成，请稍后重试。", response.status, body);
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
@@ -35,7 +49,7 @@ function errorText(error: unknown) {
   return error instanceof Error ? error.message : "操作没有完成，请稍后重试。";
 }
 
-export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutWorkspaceProps) {
+export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }: WorkoutWorkspaceProps) {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [session, setSession] = useState<WorkoutSession | null>(null);
@@ -47,6 +61,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
+  const [conflict, setConflict] = useState<ApiError | null>(null);
 
   const loadData = useCallback(async () => {
     const [plansBody, exercisesBody, sessionBody, historyBody, settingsBody] = await Promise.all([
@@ -61,6 +76,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
     setSession(sessionBody.workoutSession);
     setWorkoutSessions(historyBody.workoutSessions);
     setSettings(settingsBody.settings);
+    setConflict(null);
     setSelectedPlanId((current) => current || plansBody.plans[0]?.id || "");
     const progressBodies = await Promise.all(plansBody.plans.map((plan) => apiRequest<{ progress: ExerciseProgress[] }>(`/api/plans/${plan.id}/progress`, { cache: "no-store" })));
     setProgress(progressBodies.flatMap((body) => body.progress));
@@ -85,8 +101,12 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
   useEffect(() => {
     if (!session || session.status !== "ACTIVE") return;
     const heartbeat = () => {
-      void apiRequest(`/api/workout-sessions/${session.id}/heartbeat`, { method: "POST", body: "{}" }).catch(() => {
-        void loadData().then(() => setNotice("训练已因长时间无活动而挂起；确认后可继续训练。"));
+      void apiRequest(`/api/workout-sessions/${session.id}/heartbeat`, { method: "POST", body: "{}" }).catch((error) => {
+        void loadData().then(() => setNotice(
+          error instanceof ApiError && error.code === "SESSION_TAKEN_OVER"
+            ? "另一台设备已接管训练，当前页面已切换为只读。"
+            : "训练已因长时间无活动而挂起；确认后可继续训练。",
+        ));
       });
     };
     heartbeat();
@@ -115,6 +135,10 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
       setNotice(successMessage);
       return result;
     } catch (error) {
+      if (error instanceof ApiError && (error.code === "VERSION_CONFLICT" || error.code === "SESSION_TAKEN_OVER")) {
+        await loadData().catch(() => undefined);
+        setConflict(error);
+      }
       setNotice(errorText(error));
       return undefined;
     } finally {
@@ -132,7 +156,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
 
   async function renamePlan(plan: Plan, name: string) {
     await runMutation(
-      () => apiRequest(`/api/plans/${plan.id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+      () => apiRequest(`/api/plans/${plan.id}`, { method: "PATCH", body: JSON.stringify({ name, version: plan.version }) }),
       "计划名称已更新。",
     );
   }
@@ -141,7 +165,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
     await runMutation(
       () => apiRequest(`/api/plans/${plan.id}/days`, {
         method: "POST",
-        body: JSON.stringify({ name, suggestedWeekday }),
+        body: JSON.stringify({ name, suggestedWeekday, version: plan.version }),
       }),
       "训练日已添加。",
     );
@@ -151,7 +175,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
     await runMutation(
       () => apiRequest(`/api/plans/${plan.id}/days/${day.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ name, suggestedWeekday }),
+        body: JSON.stringify({ name, suggestedWeekday, version: day.version }),
       }),
       "训练日设置已更新。",
     );
@@ -160,7 +184,10 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
   async function deleteDay(plan: Plan, day: WorkoutDay) {
     if (!window.confirm(`删除“${day.name}”？历史训练仍会保留。`)) return;
     await runMutation(
-      () => apiRequest(`/api/plans/${plan.id}/days/${day.id}`, { method: "DELETE" }),
+      () => apiRequest(`/api/plans/${plan.id}/days/${day.id}`, {
+        method: "DELETE",
+        body: JSON.stringify({ version: day.version }),
+      }),
       "训练日已删除。",
     );
   }
@@ -169,7 +196,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
     await runMutation(
       () => apiRequest(`/api/plans/${plan.id}/days/${day.id}/exercises`, {
         method: "POST",
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, version: day.version }),
       }),
       "动作目标已添加。",
     );
@@ -184,7 +211,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
     await runMutation(
       () => apiRequest(`/api/plans/${plan.id}/days/${day.id}/exercises/${planned.id}`, {
         method: "PATCH",
-        body: JSON.stringify(input),
+        body: JSON.stringify({ ...input, version: planned.version }),
       }),
       "动作目标已更新。",
     );
@@ -193,7 +220,10 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
   async function deletePlannedExercise(plan: Plan, day: WorkoutDay, planned: PlannedExercise) {
     if (!window.confirm(`从“${day.name}”移除“${planned.exercise.name}”？`)) return;
     await runMutation(
-      () => apiRequest(`/api/plans/${plan.id}/days/${day.id}/exercises/${planned.id}`, { method: "DELETE" }),
+      () => apiRequest(`/api/plans/${plan.id}/days/${day.id}/exercises/${planned.id}`, {
+        method: "DELETE",
+        body: JSON.stringify({ version: planned.version }),
+      }),
       "动作已从训练日移除。",
     );
   }
@@ -207,7 +237,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
 
   async function renameExercise(exercise: Exercise, name: string) {
     await runMutation(
-      () => apiRequest(`/api/exercises/${exercise.id}`, { method: "PATCH", body: JSON.stringify({ name }) }),
+      () => apiRequest(`/api/exercises/${exercise.id}`, { method: "PATCH", body: JSON.stringify({ name, version: exercise.version }) }),
       "动作名称已更新。",
     );
   }
@@ -216,7 +246,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
     try {
       setBusy(true);
       const impact = await apiRequest<{
-        exercise: { plannedExerciseCount: number; sessionExerciseCount: number };
+        exercise: { plannedExerciseCount: number; sessionExerciseCount: number; version: number };
       }>(`/api/exercises/${exercise.id}`, { cache: "no-store" });
       setBusy(false);
       const confirmed = window.confirm(
@@ -226,7 +256,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
       await runMutation(
         () => apiRequest(`/api/exercises/${exercise.id}`, {
           method: "DELETE",
-          body: JSON.stringify({ confirmation: "DELETE" }),
+          body: JSON.stringify({ confirmation: "DELETE", version: impact.exercise.version }),
         }),
         "动作及其历史记录已永久删除。",
       );
@@ -266,23 +296,23 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
         };
     const path = `/api/workout-sessions/${session.id}/exercises/${exercise.id}/sets/${setIndex}`;
     const operationId = crypto.randomUUID();
-    const body = JSON.stringify({ ...payload, operationId });
+    const versionedBody = JSON.stringify({ ...payload, operationId, version: session.version });
     if (!navigator.onLine) {
-      await enqueueSet({ id: operationId, path, body });
+      await enqueueSet({ id: operationId, path, body: versionedBody });
       setNotice(`第 ${setIndex} 组已离线保存，恢复网络后会自动同步。`);
       return;
     }
     await runMutation(
       () => apiRequest(path, {
         method: "PUT",
-        body,
+        body: versionedBody,
       }),
       input === null ? `第 ${setIndex} 组已跳过。` : `第 ${setIndex} 组已记录。`,
     );
   }
 
   async function setPlanArchived(plan: Plan, archived: boolean) {
-    await runMutation(() => apiRequest(`/api/plans/${plan.id}`, { method: "PATCH", body: JSON.stringify({ archived }) }), archived ? "计划已归档。" : "计划已恢复。");
+    await runMutation(() => apiRequest(`/api/plans/${plan.id}`, { method: "PATCH", body: JSON.stringify({ archived, version: plan.version }) }), archived ? "计划已归档。" : "计划已恢复。");
   }
 
   async function addSessionExercise(input: { exerciseId: string; setCount: number; targetValue: number; weight?: number }) {
@@ -290,7 +320,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
     await runMutation(
       () => apiRequest(`/api/workout-sessions/${session.id}/exercises`, {
         method: "POST",
-        body: JSON.stringify({ ...input, ...(input.weight === undefined ? {} : { weightUnit: settings.weightUnit }) }),
+        body: JSON.stringify({ ...input, ...(input.weight === undefined ? {} : { weightUnit: settings.weightUnit }), version: session.version }),
       }),
       "动作已追加到本次训练。",
     );
@@ -299,7 +329,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
   async function removeSessionExercise(exercise: WorkoutSession["exercises"][number]) {
     if (!session || !window.confirm(`从本次训练移除“${exercise.exerciseName}”？已记录的组将不计入完成结果。`)) return;
     await runMutation(
-      () => apiRequest(`/api/workout-sessions/${session.id}/exercises/${exercise.id}`, { method: "DELETE" }),
+      () => apiRequest(`/api/workout-sessions/${session.id}/exercises/${exercise.id}`, { method: "DELETE", body: JSON.stringify({ version: session.version }) }),
       "动作已从本次训练移除。",
     );
   }
@@ -307,7 +337,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
   async function pauseWorkout() {
     if (!session) return;
     await runMutation(
-      () => apiRequest(`/api/workout-sessions/${session.id}/pause`, { method: "POST", body: "{}" }),
+      () => apiRequest(`/api/workout-sessions/${session.id}/pause`, { method: "POST", body: JSON.stringify({ version: session.version }) }),
       "训练已挂起。",
     );
   }
@@ -315,7 +345,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
   async function resumeWorkout() {
     if (!session) return;
     await runMutation(
-      () => apiRequest(`/api/workout-sessions/${session.id}/resume`, { method: "POST", body: "{}" }),
+      () => apiRequest(`/api/workout-sessions/${session.id}/resume`, { method: "POST", body: JSON.stringify({ version: session.version }) }),
       "训练已继续。",
     );
   }
@@ -323,7 +353,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
   async function completeWorkout() {
     if (!session) return;
     const result = await runMutation(
-      () => apiRequest(`/api/workout-sessions/${session.id}/complete`, { method: "POST", body: "{}" }),
+      () => apiRequest(`/api/workout-sessions/${session.id}/complete`, { method: "POST", body: JSON.stringify({ version: session.version }) }),
       "训练已完成。",
     );
     if (result !== undefined) setView("history");
@@ -334,16 +364,25 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
 
   async function abandonWorkout() {
     if (!session) return;
-    const result = await runMutation(() => apiRequest(`/api/workout-sessions/${session.id}/abandon`, { method: "POST", body: "{}" }), "训练已放弃，不计入进展。");
+    const result = await runMutation(() => apiRequest(`/api/workout-sessions/${session.id}/abandon`, { method: "POST", body: JSON.stringify({ version: session.version }) }), "训练已放弃，不计入进展。");
     if (result !== undefined) setView("today");
   }
 
   async function correctHistoricalSet(session: WorkoutHistorySession, exercise: WorkoutSession["exercises"][number], setIndex: number, input: { actualValue: number; actualWeight?: number } | null) {
     const payload = input === null ? { skipped: true } : { actualValue: input.actualValue, ...(exercise.resistanceType === "WEIGHTED" ? { actualWeight: input.actualWeight, weightUnit: settings.weightUnit } : {}) };
     await runMutation(
-      () => apiRequest(`/api/workout-sessions/${session.id}/exercises/${exercise.id}/sets/${setIndex}`, { method: "PUT", body: JSON.stringify(payload) }),
+      () => apiRequest(`/api/workout-sessions/${session.id}/exercises/${exercise.id}/sets/${setIndex}`, { method: "PUT", body: JSON.stringify({ ...payload, version: session.version }) }),
       `第 ${setIndex} 组历史记录已修正。`,
     );
+  }
+
+  async function takeOverSession() {
+    if (!session) return;
+    const result = await runMutation(
+      () => apiRequest(`/api/workout-sessions/${session.id}/takeover`, { method: "POST", body: JSON.stringify({ version: session.version }) }),
+      "已在此设备接管训练。",
+    );
+    if (result !== undefined) setView("training");
   }
 
   const allDays = plans.flatMap((plan) => plan.workoutDays.map((day) => ({ plan, day })));
@@ -351,6 +390,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
     ?? allDays.find(({ day }) => day.plannedExercises.length > 0)
     ?? allDays[0]
     ?? null;
+  const canEditSession = session?.editingDeviceId === deviceId;
 
   return (
     <main className="workspace-shell">
@@ -375,6 +415,12 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
         </header>
 
         {notice && <p className={`workspace-notice ${notice.includes("失败") ? "error" : ""}`} role="status">{notice}</p>}
+        {conflict && (
+          <div className="workspace-notice error" role="alert">
+            <span>{conflict.message}。请刷新后再编辑。</span>
+            <button className="text-button" type="button" onClick={() => void loadData()}>刷新最新数据</button>
+          </div>
+        )}
 
         <div className="workspace-body">
           {loading ? <p className="loading-state">正在加载训练空间…</p> : (
@@ -464,6 +510,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
                   exercises={exercises}
                   busy={busy}
                   weightUnit={settings.weightUnit}
+                  canEdit={canEditSession}
                   onRecordSet={recordSet}
                   onAddExercise={addSessionExercise}
                   onRemoveExercise={removeSessionExercise}
@@ -471,6 +518,7 @@ export function WorkoutWorkspace({ user, onSignOut, onAccountDeleted }: WorkoutW
                   onResume={resumeWorkout}
                   onComplete={completeWorkout}
                   onAbandon={abandonWorkout}
+                  onTakeover={takeOverSession}
                 />
               )}
             </>

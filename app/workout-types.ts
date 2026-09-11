@@ -6,6 +6,7 @@ export type Exercise = {
   name: string;
   resistanceType: ResistanceType;
   targetType: TargetType;
+  version: number;
 };
 
 export type PlannedExercise = {
@@ -14,6 +15,7 @@ export type PlannedExercise = {
   setCount: number;
   targetValue: number;
   weightGrams: number | null;
+  version: number;
   exercise: Exercise;
 };
 
@@ -21,12 +23,14 @@ export type WorkoutDay = {
   id: string;
   name: string;
   suggestedWeekday: number | null;
+  version: number;
   plannedExercises: PlannedExercise[];
 };
 
 export type Plan = {
   id: string;
   name: string;
+  version: number;
   archivedAt: string | null;
   workoutDays: WorkoutDay[];
 };
@@ -61,6 +65,8 @@ export type WorkoutSession = {
   pausedAt: string | null;
   completedAt: string | null;
   trainingTimeSeconds: number | null;
+  version: number;
+  editingDeviceId: string | null;
   exercises: SessionExercise[];
 };
 

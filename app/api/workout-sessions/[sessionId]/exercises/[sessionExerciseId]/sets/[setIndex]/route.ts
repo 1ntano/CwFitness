@@ -1,4 +1,5 @@
 import { getVerifiedSession } from "@/lib/auth";
+import { requestedVersion, sessionUnavailable, versionConflict } from "@/lib/concurrency";
 import { prisma } from "@/lib/prisma";
 import { weightInGrams } from "@/lib/weights";
 
@@ -9,13 +10,15 @@ export async function PUT(request: Request, context: { params: Promise<{ session
   const setIndex = Number(rawIndex);
   const exercise = await prisma.sessionExercise.findFirst({
     where: { id: sessionExerciseId, workoutSessionId: sessionId, removedAt: null, workoutSession: { userId: session.user.id } },
-    include: { workoutSession: { select: { status: true } } },
+    include: { workoutSession: { select: { status: true, version: true, editingDeviceId: true } } },
   });
   if (!exercise) return Response.json({ error: "Session Exercise not found" }, { status: 404 });
   if (exercise.workoutSession.status !== "ACTIVE" && exercise.workoutSession.status !== "COMPLETED") return Response.json({ error: "Session is not editable" }, { status: 409 });
   if (!Number.isInteger(setIndex) || setIndex < 1 || setIndex > exercise.setCount) return Response.json({ error: "Invalid set index" }, { status: 400 });
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  const version = requestedVersion(body?.version);
+  if (!version) return Response.json({ error: "Version is required" }, { status: 400 });
   const operationId = typeof body?.operationId === "string" && body.operationId.length > 0 && body.operationId.length <= 100 ? body.operationId : null;
   if (body?.operationId !== undefined && !operationId) return Response.json({ error: "Invalid operation id" }, { status: 400 });
   if (operationId) {
@@ -25,6 +28,10 @@ export async function PUT(request: Request, context: { params: Promise<{ session
       return Response.json({ setResult: { setIndex: prior.setIndex, actualValue: prior.actualValue, actualWeightGrams: prior.actualWeightGrams, skipped: prior.skipped } });
     }
   }
+  if (exercise.workoutSession.status === "ACTIVE" && exercise.workoutSession.editingDeviceId !== session.session.id) {
+    return sessionUnavailable(exercise.workoutSession, "SESSION_TAKEN_OVER", "Workout Session is being edited on another device");
+  }
+  if (exercise.workoutSession.version !== version) return versionConflict(exercise.workoutSession, "Workout Session changed on another device");
   const skipped = body?.skipped === true;
   let actualValue: number | null = null;
   let actualWeightGrams: number | null = null;
@@ -36,11 +43,34 @@ export async function PUT(request: Request, context: { params: Promise<{ session
       if (actualWeightGrams === null) return Response.json({ error: "Actual weight is required" }, { status: 400 });
     }
   }
-  const setResult = await prisma.sessionSetResult.upsert({
-    where: { sessionExerciseId_setIndex: { sessionExerciseId, setIndex } },
-    create: { sessionExerciseId, setIndex, actualValue, actualWeightGrams, skipped, operationId },
-    update: { actualValue, actualWeightGrams, skipped },
-    select: { setIndex: true, actualValue: true, actualWeightGrams: true, skipped: true },
+  const setResult = await prisma.$transaction(async (tx) => {
+    const lease = await tx.workoutSession.updateMany({
+      where: {
+        id: sessionId,
+        userId: session.user.id,
+        version,
+        ...(exercise.workoutSession.status === "ACTIVE"
+          ? { status: "ACTIVE", editingDeviceId: session.session.id }
+          : { status: "COMPLETED" }),
+      },
+      data: { updatedAt: new Date() },
+    });
+    if (lease.count === 0) return null;
+    return tx.sessionSetResult.upsert({
+      where: { sessionExerciseId_setIndex: { sessionExerciseId, setIndex } },
+      create: { sessionExerciseId, setIndex, actualValue, actualWeightGrams, skipped, operationId },
+      update: { actualValue, actualWeightGrams, skipped },
+      select: { setIndex: true, actualValue: true, actualWeightGrams: true, skipped: true },
+    });
   });
+  if (!setResult) {
+    const latest = await prisma.workoutSession.findUniqueOrThrow({
+      where: { id: sessionId },
+      select: { id: true, status: true, version: true, editingDeviceId: true },
+    });
+    return latest.editingDeviceId !== session.session.id
+      ? sessionUnavailable(latest, "SESSION_TAKEN_OVER", "Workout Session is being edited on another device")
+      : versionConflict(latest, "Workout Session changed on another device");
+  }
   return Response.json({ setResult });
 }

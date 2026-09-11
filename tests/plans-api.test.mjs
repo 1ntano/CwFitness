@@ -254,7 +254,8 @@ test('Archived plans cannot start workouts and account deletion requires confirm
   const day = await createWorkoutDay(cookie, plan.id, 'Archived Day');
   const exercise = await createExercise(cookie, { name: 'Archive Press', resistanceType: 'WEIGHTED', targetType: 'REPETITIONS' });
   await addPlannedExercise(cookie, plan.id, day.id, { exerciseId: exercise.id, setCount: 3, targetValue: 8, weight: 60, weightUnit: 'kg' });
-  const archived = await request(`/api/plans/${plan.id}`, { method: 'PATCH', headers: { cookie }, body: JSON.stringify({ archived: true }) });
+  const currentPlan = await getPlan(cookie, plan.id);
+  const archived = await request(`/api/plans/${plan.id}`, { method: 'PATCH', headers: { cookie }, body: JSON.stringify({ archived: true, version: currentPlan.version }) });
   assert.equal(archived.status, 200);
   const blockedStart = await request('/api/workout-sessions', { method: 'POST', headers: { cookie }, body: JSON.stringify({ workoutDayId: day.id, timeZone: 'UTC' }) });
   assert.equal(blockedStart.status, 404);
@@ -296,7 +297,7 @@ test('User composes a Workout Plan from owned Exercises and Workout Days', async
   const renamed = await request(`/api/exercises/${exercise.id}`, {
     method: 'PATCH',
     headers: { cookie: aliceCookie },
-    body: JSON.stringify({ name: 'Barbell Bench Press' }),
+    body: JSON.stringify({ name: 'Barbell Bench Press', version: exercise.version }),
   });
   assert.equal(renamed.status, 200);
   assert.equal((await renamed.json()).exercise.id, exercise.id);
@@ -307,6 +308,7 @@ test('User composes a Workout Plan from owned Exercises and Workout Days', async
     name: 'Barbell Bench Press',
     resistanceType: 'WEIGHTED',
     targetType: 'REPETITIONS',
+    version: 2,
   }]);
   const bobExercises = await request('/api/exercises', { headers: { cookie: bobCookie } });
   assert.deepEqual(await bobExercises.json(), { exercises: [] });
@@ -314,7 +316,7 @@ test('User composes a Workout Plan from owned Exercises and Workout Days', async
   const dayResponse = await request(`/api/plans/${plan.id}/days`, {
     method: 'POST',
     headers: { cookie: aliceCookie },
-    body: JSON.stringify({ name: 'Push Day', suggestedWeekday: 1 }),
+    body: JSON.stringify({ name: 'Push Day', suggestedWeekday: 1, version: plan.version }),
   });
   assert.equal(dayResponse.status, 201);
   const day = (await dayResponse.json()).workoutDay;
@@ -322,7 +324,7 @@ test('User composes a Workout Plan from owned Exercises and Workout Days', async
   const forbiddenDay = await request(`/api/plans/${plan.id}/days`, {
     method: 'POST',
     headers: { cookie: bobCookie },
-    body: JSON.stringify({ name: 'Stolen Day' }),
+    body: JSON.stringify({ name: 'Stolen Day', version: plan.version }),
   });
   assert.equal(forbiddenDay.status, 404);
 
@@ -342,6 +344,7 @@ test('User composes a Workout Plan from owned Exercises and Workout Days', async
       targetValue: 8,
       weight: 60,
       weightUnit: 'kg',
+      version: day.version,
     }),
   });
   assert.equal(plannedResponse.status, 201);
@@ -353,6 +356,7 @@ test('User composes a Workout Plan from owned Exercises and Workout Days', async
     setCount: 3,
     targetValue: 8,
     weightGrams: 60_000,
+    version: 1,
   });
 });
 
@@ -365,19 +369,31 @@ async function createExercise(cookie, data) {
 }
 
 async function createWorkoutDay(cookie, planId, name) {
+  const plan = await getPlan(cookie, planId);
   const response = await request(`/api/plans/${planId}/days`, {
-    method: 'POST', headers: { cookie }, body: JSON.stringify({ name }),
+    method: 'POST', headers: { cookie }, body: JSON.stringify({ name, version: plan.version }),
   });
   assert.equal(response.status, 201);
   return (await response.json()).workoutDay;
 }
 
 async function addPlannedExercise(cookie, planId, dayId, data) {
+  const plan = await getPlan(cookie, planId);
+  const day = plan.workoutDays.find((item) => item.id === dayId);
+  if (!day) assert.fail('Workout Day not found for Planned Exercise creation');
   const response = await request(`/api/plans/${planId}/days/${dayId}/exercises`, {
-    method: 'POST', headers: { cookie }, body: JSON.stringify(data),
+    method: 'POST', headers: { cookie }, body: JSON.stringify({ ...data, version: day.version }),
   });
   assert.equal(response.status, 201);
   return (await response.json()).plannedExercise;
+}
+
+async function getPlan(cookie, planId) {
+  const response = await request('/api/plans', { headers: { cookie } });
+  assert.equal(response.status, 200);
+  const plan = (await response.json()).plans.find((item) => item.id === planId);
+  if (!plan) assert.fail(`Workout Plan ${planId} not found`);
+  return plan;
 }
 
 test('User starts one snapshotted Workout Session and completes its timed lifecycle', async () => {
@@ -427,7 +443,7 @@ test('User starts one snapshotted Workout Session and completes its timed lifecy
   assert.equal(duplicate.status, 409);
 
   const hidden = await request(`/api/workout-sessions/${session.id}/pause`, {
-    method: 'POST', headers: { cookie: otherCookie }, body: '{}',
+    method: 'POST', headers: { cookie: otherCookie }, body: JSON.stringify({ version: session.version }),
   });
   assert.equal(hidden.status, 404);
 
@@ -437,23 +453,25 @@ test('User starts one snapshotted Workout Session and completes its timed lifecy
   assert.equal(heartbeat.status, 204);
 
   const paused = await request(`/api/workout-sessions/${session.id}/pause`, {
-    method: 'POST', headers: { cookie }, body: '{}',
+    method: 'POST', headers: { cookie }, body: JSON.stringify({ version: session.version }),
   });
   assert.equal(paused.status, 200);
-  assert.equal((await paused.json()).workoutSession.status, 'PAUSED');
+  const pausedSession = (await paused.json()).workoutSession;
+  assert.equal(pausedSession.status, 'PAUSED');
 
   const active = await request('/api/workout-sessions/active', { headers: { cookie } });
   assert.equal(active.status, 200);
   assert.equal((await active.json()).workoutSession.id, session.id);
 
   const resumed = await request(`/api/workout-sessions/${session.id}/resume`, {
-    method: 'POST', headers: { cookie }, body: '{}',
+    method: 'POST', headers: { cookie }, body: JSON.stringify({ version: pausedSession.version }),
   });
   assert.equal(resumed.status, 200);
-  assert.equal((await resumed.json()).workoutSession.status, 'ACTIVE');
+  const resumedSession = (await resumed.json()).workoutSession;
+  assert.equal(resumedSession.status, 'ACTIVE');
 
   const completed = await request(`/api/workout-sessions/${session.id}/complete`, {
-    method: 'POST', headers: { cookie }, body: '{}',
+    method: 'POST', headers: { cookie }, body: JSON.stringify({ version: resumedSession.version }),
   });
   assert.equal(completed.status, 200);
   const completedSession = (await completed.json()).workoutSession;
@@ -492,7 +510,7 @@ test('User starts one snapshotted Workout Session and completes its timed lifecy
     progressionSuggestion: false,
   }]);
   const correction = await request(`/api/workout-sessions/${session.id}/exercises/${session.exercises[0].id}/sets/1`, {
-    method: 'PUT', headers: { cookie }, body: JSON.stringify({ actualValue: 6, actualWeight: 100, weightUnit: 'kg' }),
+    method: 'PUT', headers: { cookie }, body: JSON.stringify({ actualValue: 6, actualWeight: 100, weightUnit: 'kg', version: completedSession.version }),
   });
   assert.equal(correction.status, 200);
   const correctedHistory = await request('/api/workout-sessions', { headers: { cookie } });
@@ -529,36 +547,38 @@ test('User records sets and receives per-Exercise achievement without removed Ex
 
   const firstSet = await request(`/api/workout-sessions/${session.id}/exercises/${sessionExercise.id}/sets/1`, {
     method: 'PUT', headers: { cookie },
-    body: JSON.stringify({ actualValue: 12, actualWeight: 110, weightUnit: 'kg', operationId: `${session.id}-record-deadlift-set-1` }),
+    body: JSON.stringify({ actualValue: 12, actualWeight: 110, weightUnit: 'kg', operationId: `${session.id}-record-deadlift-set-1`, version: session.version }),
   });
   assert.equal(firstSet.status, 200);
   assert.deepEqual((await firstSet.json()).setResult, {
     setIndex: 1, actualValue: 12, actualWeightGrams: 110_000, skipped: false,
   });
   const repeatedSet = await request(`/api/workout-sessions/${session.id}/exercises/${sessionExercise.id}/sets/1`, {
-    method: 'PUT', headers: { cookie }, body: JSON.stringify({ actualValue: 1, actualWeight: 1, weightUnit: 'kg', operationId: `${session.id}-record-deadlift-set-1` }),
+    method: 'PUT', headers: { cookie }, body: JSON.stringify({ actualValue: 1, actualWeight: 1, weightUnit: 'kg', operationId: `${session.id}-record-deadlift-set-1`, version: session.version }),
   });
   assert.equal(repeatedSet.status, 200);
   assert.deepEqual((await repeatedSet.json()).setResult, { setIndex: 1, actualValue: 12, actualWeightGrams: 110_000, skipped: false });
 
   const partialWeightSet = await request(`/api/workout-sessions/${session.id}/exercises/${underTargetSessionExercise.id}/sets/1`, {
     method: 'PUT', headers: { cookie },
-    body: JSON.stringify({ actualValue: 8, actualWeight: 110, weightUnit: 'kg' }),
+    body: JSON.stringify({ actualValue: 8, actualWeight: 110, weightUnit: 'kg', version: session.version }),
   });
   assert.equal(partialWeightSet.status, 200);
 
   const paused = await request(`/api/workout-sessions/${session.id}/pause`, {
-    method: 'POST', headers: { cookie }, body: '{}',
+    method: 'POST', headers: { cookie }, body: JSON.stringify({ version: session.version }),
   });
   assert.equal(paused.status, 200);
+  const pausedSession = (await paused.json()).workoutSession;
   const blockedWhilePaused = await request(`/api/workout-sessions/${session.id}/exercises/${sessionExercise.id}/sets/2`, {
-    method: 'PUT', headers: { cookie }, body: JSON.stringify({ skipped: true }),
+    method: 'PUT', headers: { cookie }, body: JSON.stringify({ skipped: true, version: pausedSession.version }),
   });
   assert.equal(blockedWhilePaused.status, 409);
-  await request(`/api/workout-sessions/${session.id}/resume`, { method: 'POST', headers: { cookie }, body: '{}' });
+  const resumed = await request(`/api/workout-sessions/${session.id}/resume`, { method: 'POST', headers: { cookie }, body: JSON.stringify({ version: pausedSession.version }) });
+  const resumedSession = (await resumed.json()).workoutSession;
 
   const skippedSet = await request(`/api/workout-sessions/${session.id}/exercises/${sessionExercise.id}/sets/2`, {
-    method: 'PUT', headers: { cookie }, body: JSON.stringify({ skipped: true }),
+    method: 'PUT', headers: { cookie }, body: JSON.stringify({ skipped: true, version: resumedSession.version }),
   });
   assert.equal(skippedSet.status, 200);
 
@@ -567,30 +587,32 @@ test('User records sets and receives per-Exercise achievement without removed Ex
   });
   const incompleteAdded = await request(`/api/workout-sessions/${session.id}/exercises`, {
     method: 'POST', headers: { cookie },
-    body: JSON.stringify({ exerciseId: duration.id, setCount: 1 }),
+    body: JSON.stringify({ exerciseId: duration.id, setCount: 1, version: resumedSession.version }),
   });
   assert.equal(incompleteAdded.status, 400);
   const addedResponse = await request(`/api/workout-sessions/${session.id}/exercises`, {
     method: 'POST', headers: { cookie },
-    body: JSON.stringify({ exerciseId: duration.id, setCount: 1, targetValue: 30 }),
+    body: JSON.stringify({ exerciseId: duration.id, setCount: 1, targetValue: 30, version: resumedSession.version }),
   });
   assert.equal(addedResponse.status, 201);
   const added = (await addedResponse.json()).sessionExercise;
   assert.equal(added.source, 'ADDED');
+  const afterAdd = (await (await request('/api/workout-sessions/active', { headers: { cookie } })).json()).workoutSession;
   const addedSet = await request(`/api/workout-sessions/${session.id}/exercises/${added.id}/sets/1`, {
-    method: 'PUT', headers: { cookie }, body: JSON.stringify({ actualValue: 45 }),
+    method: 'PUT', headers: { cookie }, body: JSON.stringify({ actualValue: 45, version: afterAdd.version }),
   });
   assert.equal(addedSet.status, 200);
   assert.deepEqual((await addedSet.json()).setResult, {
     setIndex: 1, actualValue: 45, actualWeightGrams: null, skipped: false,
   });
   const removed = await request(`/api/workout-sessions/${session.id}/exercises/${added.id}`, {
-    method: 'DELETE', headers: { cookie },
+    method: 'DELETE', headers: { cookie }, body: JSON.stringify({ version: afterAdd.version }),
   });
   assert.equal(removed.status, 204);
+  const afterRemove = (await (await request('/api/workout-sessions/active', { headers: { cookie } })).json()).workoutSession;
 
   const completed = await request(`/api/workout-sessions/${session.id}/complete`, {
-    method: 'POST', headers: { cookie }, body: '{}',
+    method: 'POST', headers: { cookie }, body: JSON.stringify({ version: afterRemove.version }),
   });
   assert.equal(completed.status, 200);
   assert.deepEqual((await completed.json()).exerciseResults, [{
@@ -620,30 +642,38 @@ test('User edits plan structure and permanently deletes an Exercise', async () =
   const planned = await addPlannedExercise(cookie, plan.id, day.id, {
     exerciseId: exercise.id, setCount: 3, targetValue: 8, weight: 80, weightUnit: 'kg',
   });
+  const currentPlan = await getPlan(cookie, plan.id);
+  const currentDay = currentPlan.workoutDays.find((item) => item.id === day.id);
+  assert.ok(currentDay);
 
   const renamedPlan = await request(`/api/plans/${plan.id}`, {
-    method: 'PATCH', headers: { cookie }, body: JSON.stringify({ name: 'Edited Plan' }),
+    method: 'PATCH', headers: { cookie }, body: JSON.stringify({ name: 'Edited Plan', version: currentPlan.version }),
   });
   assert.equal(renamedPlan.status, 200);
 
   const updatedDay = await request(`/api/plans/${plan.id}/days/${day.id}`, {
     method: 'PATCH', headers: { cookie },
-    body: JSON.stringify({ name: 'Heavy Leg Day', suggestedWeekday: 4 }),
+    body: JSON.stringify({ name: 'Heavy Leg Day', suggestedWeekday: 4, version: currentDay.version }),
   });
   assert.equal(updatedDay.status, 200);
+  const updatedDayRecord = (await updatedDay.json()).workoutDay;
+  assert.equal(updatedDayRecord.version, 3);
 
   const updatedPlanned = await request(`/api/plans/${plan.id}/days/${day.id}/exercises/${planned.id}`, {
     method: 'PATCH', headers: { cookie },
-    body: JSON.stringify({ setCount: 4, targetValue: 6, weight: 85, weightUnit: 'kg' }),
+    body: JSON.stringify({ setCount: 4, targetValue: 6, weight: 85, weightUnit: 'kg', version: planned.version }),
   });
   assert.equal(updatedPlanned.status, 200);
-  assert.deepEqual(await updatedPlanned.json(), {
+  const updatedPlannedBody = await updatedPlanned.json();
+  const updatedPlannedRecord = updatedPlannedBody.plannedExercise;
+  assert.deepEqual(updatedPlannedBody, {
     plannedExercise: {
       id: planned.id,
       exerciseId: exercise.id,
       setCount: 4,
       targetValue: 6,
       weightGrams: 85_000,
+      version: 2,
     },
   });
 
@@ -660,12 +690,15 @@ test('User edits plan structure and permanently deletes an Exercise', async () =
   assert.deepEqual((await impact.json()).exercise.plannedExerciseCount, 1);
 
   const removedPlanned = await request(`/api/plans/${plan.id}/days/${day.id}/exercises/${planned.id}`, {
-    method: 'DELETE', headers: { cookie },
+    method: 'DELETE', headers: { cookie }, body: JSON.stringify({ version: updatedPlannedRecord.version }),
   });
   assert.equal(removedPlanned.status, 204);
 
+  const planAfterPlannedRemoval = await getPlan(cookie, plan.id);
+  const dayAfterPlannedRemoval = planAfterPlannedRemoval.workoutDays.find((item) => item.id === day.id);
+  assert.ok(dayAfterPlannedRemoval);
   const removedDay = await request(`/api/plans/${plan.id}/days/${day.id}`, {
-    method: 'DELETE', headers: { cookie },
+    method: 'DELETE', headers: { cookie }, body: JSON.stringify({ version: dayAfterPlannedRemoval.version }),
   });
   assert.equal(removedDay.status, 204);
 
@@ -675,7 +708,7 @@ test('User edits plan structure and permanently deletes an Exercise', async () =
   assert.equal(unconfirmedDelete.status, 400);
 
   const deletedExercise = await request(`/api/exercises/${exercise.id}`, {
-    method: 'DELETE', headers: { cookie }, body: JSON.stringify({ confirmation: 'DELETE' }),
+    method: 'DELETE', headers: { cookie }, body: JSON.stringify({ confirmation: 'DELETE', version: exercise.version }),
   });
   assert.equal(deletedExercise.status, 204);
   assert.deepEqual(await (await request('/api/exercises', { headers: { cookie } })).json(), { exercises: [] });
@@ -709,29 +742,29 @@ test('Plan structure edits and deletes are isolated by owner', async () => {
   });
 
   const forbiddenPlan = await request(`/api/plans/${plan.id}`, {
-    method: 'PATCH', headers: { cookie: bobCookie }, body: JSON.stringify({ name: 'Stolen Plan' }),
+    method: 'PATCH', headers: { cookie: bobCookie }, body: JSON.stringify({ name: 'Stolen Plan', version: plan.version }),
   });
   assert.equal(forbiddenPlan.status, 404);
 
   const forbiddenDay = await request(`/api/plans/${plan.id}/days/${day.id}`, {
     method: 'PATCH', headers: { cookie: bobCookie },
-    body: JSON.stringify({ name: 'Stolen Day', suggestedWeekday: 2 }),
+    body: JSON.stringify({ name: 'Stolen Day', suggestedWeekday: 2, version: day.version }),
   });
   assert.equal(forbiddenDay.status, 404);
 
   const forbiddenPlanned = await request(`/api/plans/${plan.id}/days/${day.id}/exercises/${planned.id}`, {
     method: 'PATCH', headers: { cookie: bobCookie },
-    body: JSON.stringify({ setCount: 9, targetValue: 1, weight: 1, weightUnit: 'kg' }),
+    body: JSON.stringify({ setCount: 9, targetValue: 1, weight: 1, weightUnit: 'kg', version: planned.version }),
   });
   assert.equal(forbiddenPlanned.status, 404);
 
   const forbiddenPlannedDelete = await request(`/api/plans/${plan.id}/days/${day.id}/exercises/${planned.id}`, {
-    method: 'DELETE', headers: { cookie: bobCookie },
+    method: 'DELETE', headers: { cookie: bobCookie }, body: JSON.stringify({ version: planned.version }),
   });
   assert.equal(forbiddenPlannedDelete.status, 404);
 
   const forbiddenDayDelete = await request(`/api/plans/${plan.id}/days/${day.id}`, {
-    method: 'DELETE', headers: { cookie: bobCookie },
+    method: 'DELETE', headers: { cookie: bobCookie }, body: JSON.stringify({ version: day.version }),
   });
   assert.equal(forbiddenDayDelete.status, 404);
 
@@ -743,6 +776,167 @@ test('Plan structure edits and deletes are isolated by owner', async () => {
   assert.equal(savedPlan.name, 'Owner Plan');
   assert.equal(savedPlan.workoutDays[0].name, 'Owner Day');
   assert.equal(savedPlan.workoutDays[0].plannedExercises[0].setCount, 2);
+});
+
+test('Two devices editing the same Workout Plan receive an explicit conflict', async () => {
+  const { cookie: firstDevice, email } = await registerVerifiedUser('PlanConflict');
+  const secondSignIn = await request('/api/auth/sign-in/email', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'test-password-123' }),
+  });
+  assert.equal(secondSignIn.status, 200);
+  const secondDevice = secondSignIn.headers.getSetCookie().map((value) => value.split(';', 1)[0]).join('; ');
+  const plan = await createPlan(firstDevice, 'Concurrent Plan');
+  assert.equal(plan.version, 1);
+
+  const firstEdit = await request(`/api/plans/${plan.id}`, {
+    method: 'PATCH',
+    headers: { cookie: firstDevice },
+    body: JSON.stringify({ name: 'First Device Edit', version: plan.version }),
+  });
+  assert.equal(firstEdit.status, 200);
+
+  const staleEdit = await request(`/api/plans/${plan.id}`, {
+    method: 'PATCH',
+    headers: { cookie: secondDevice },
+    body: JSON.stringify({ name: 'Stale Second Device Edit', version: plan.version }),
+  });
+  assert.equal(staleEdit.status, 409);
+  const conflict = await staleEdit.json();
+  assert.equal(conflict.code, 'VERSION_CONFLICT');
+  assert.equal(conflict.current.name, 'First Device Edit');
+  assert.equal(conflict.current.version, 2);
+});
+
+test('A stale parent version cannot add a Workout Day', async () => {
+  const { cookie: firstDevice, email } = await registerVerifiedUser('PlanChildConflict');
+  const secondSignIn = await request('/api/auth/sign-in/email', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'test-password-123' }),
+  });
+  const secondDevice = secondSignIn.headers.getSetCookie().map((value) => value.split(';', 1)[0]).join('; ');
+  const plan = await createPlan(firstDevice, 'Child Conflict Plan');
+
+  const firstDay = await request(`/api/plans/${plan.id}/days`, {
+    method: 'POST',
+    headers: { cookie: firstDevice },
+    body: JSON.stringify({ name: 'First Day', version: plan.version }),
+  });
+  assert.equal(firstDay.status, 201);
+
+  const staleDay = await request(`/api/plans/${plan.id}/days`, {
+    method: 'POST',
+    headers: { cookie: secondDevice },
+    body: JSON.stringify({ name: 'Stale Day', version: plan.version }),
+  });
+  assert.equal(staleDay.status, 409);
+  const conflict = await staleDay.json();
+  assert.equal(conflict.code, 'VERSION_CONFLICT');
+  assert.equal(conflict.current.version, 2);
+});
+
+test('A second device can explicitly take over an In-progress Session', async () => {
+  const { cookie: firstDevice, email } = await registerVerifiedUser('SessionTakeover');
+  const secondSignIn = await request('/api/auth/sign-in/email', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'test-password-123' }),
+  });
+  assert.equal(secondSignIn.status, 200);
+  const secondDevice = secondSignIn.headers.getSetCookie().map((value) => value.split(';', 1)[0]).join('; ');
+  const thirdSignIn = await request('/api/auth/sign-in/email', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'test-password-123' }),
+  });
+  assert.equal(thirdSignIn.status, 200);
+  const thirdDevice = thirdSignIn.headers.getSetCookie().map((value) => value.split(';', 1)[0]).join('; ');
+  const plan = await createPlan(firstDevice, 'Takeover Plan');
+  const day = await createWorkoutDay(firstDevice, plan.id, 'Takeover Day');
+  const exercise = await createExercise(firstDevice, {
+    name: 'Takeover Press', resistanceType: 'BODYWEIGHT', targetType: 'REPETITIONS',
+  });
+  await addPlannedExercise(firstDevice, plan.id, day.id, {
+    exerciseId: exercise.id, setCount: 1, targetValue: 8,
+  });
+  const started = await request('/api/workout-sessions', {
+    method: 'POST', headers: { cookie: firstDevice },
+    body: JSON.stringify({ workoutDayId: day.id, timeZone: 'Asia/Shanghai' }),
+  });
+  assert.equal(started.status, 201);
+  const session = (await started.json()).workoutSession;
+  const sessionExercise = session.exercises[0];
+
+  const denied = await request(`/api/workout-sessions/${session.id}/exercises/${sessionExercise.id}/sets/1`, {
+    method: 'PUT', headers: { cookie: secondDevice },
+    body: JSON.stringify({ actualValue: 8, version: session.version }),
+  });
+  assert.equal(denied.status, 409);
+  assert.equal((await denied.json()).code, 'SESSION_TAKEN_OVER');
+
+  const takeoverResponses = await Promise.all([
+    request(`/api/workout-sessions/${session.id}/takeover`, {
+      method: 'POST', headers: { cookie: secondDevice }, body: JSON.stringify({ version: session.version }),
+    }),
+    request(`/api/workout-sessions/${session.id}/takeover`, {
+      method: 'POST', headers: { cookie: thirdDevice }, body: JSON.stringify({ version: session.version }),
+    }),
+  ]);
+  assert.deepEqual(takeoverResponses.map((response) => response.status).sort(), [200, 409]);
+  const winnerIndex = takeoverResponses.findIndex((response) => response.status === 200);
+  const winningDevice = winnerIndex === 0 ? secondDevice : thirdDevice;
+  const takenOver = (await takeoverResponses[winnerIndex].json()).workoutSession;
+  assert.equal((await takeoverResponses[1 - winnerIndex].json()).code, 'VERSION_CONFLICT');
+  assert.notEqual(takenOver.editingDeviceId, session.editingDeviceId);
+  assert.equal(takenOver.version, session.version + 1);
+
+  const oldDeviceWrite = await request(`/api/workout-sessions/${session.id}/exercises/${sessionExercise.id}/sets/1`, {
+    method: 'PUT', headers: { cookie: firstDevice },
+    body: JSON.stringify({ actualValue: 8, version: takenOver.version }),
+  });
+  assert.equal(oldDeviceWrite.status, 409);
+  assert.equal((await oldDeviceWrite.json()).code, 'SESSION_TAKEN_OVER');
+
+  const newDeviceWrite = await request(`/api/workout-sessions/${session.id}/exercises/${sessionExercise.id}/sets/1`, {
+    method: 'PUT', headers: { cookie: winningDevice },
+    body: JSON.stringify({ actualValue: 8, version: takenOver.version }),
+  });
+  assert.equal(newDeviceWrite.status, 200);
+
+  const completed = await request(`/api/workout-sessions/${session.id}/complete`, {
+    method: 'POST', headers: { cookie: winningDevice }, body: JSON.stringify({ version: takenOver.version }),
+  });
+  assert.equal(completed.status, 200);
+  assert.equal((await completed.json()).workoutSession.editingDeviceId, null);
+});
+
+test('Abandoning an In-progress Session releases its editing lease', async () => {
+  const { cookie } = await registerVerifiedUser('SessionAbandon');
+  const plan = await createPlan(cookie, 'Abandon Plan');
+  const day = await createWorkoutDay(cookie, plan.id, 'Abandon Day');
+  const exercise = await createExercise(cookie, {
+    name: 'Abandon Squat', resistanceType: 'BODYWEIGHT', targetType: 'REPETITIONS',
+  });
+  await addPlannedExercise(cookie, plan.id, day.id, {
+    exerciseId: exercise.id, setCount: 1, targetValue: 5,
+  });
+  const started = await request('/api/workout-sessions', {
+    method: 'POST', headers: { cookie },
+    body: JSON.stringify({ workoutDayId: day.id, timeZone: 'Asia/Shanghai' }),
+  });
+  const session = (await started.json()).workoutSession;
+
+  const abandoned = await request(`/api/workout-sessions/${session.id}/abandon`, {
+    method: 'POST', headers: { cookie }, body: JSON.stringify({ version: session.version }),
+  });
+  assert.equal(abandoned.status, 204);
+
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    const stored = await client.query('SELECT "editingDeviceId" FROM "workout_session" WHERE id = $1', [session.id]);
+    assert.equal(stored.rows[0].editingDeviceId, null);
+  } finally {
+    await client.end();
+  }
 });
 
 test('Permanent Exercise deletion is blocked by an In-progress Session', async () => {
@@ -763,7 +957,7 @@ test('Permanent Exercise deletion is blocked by an In-progress Session', async (
   assert.equal(started.status, 201);
 
   const blockedDelete = await request(`/api/exercises/${exercise.id}`, {
-    method: 'DELETE', headers: { cookie }, body: JSON.stringify({ confirmation: 'DELETE' }),
+    method: 'DELETE', headers: { cookie }, body: JSON.stringify({ confirmation: 'DELETE', version: exercise.version }),
   });
   assert.equal(blockedDelete.status, 409);
 

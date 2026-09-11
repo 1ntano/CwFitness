@@ -1,4 +1,5 @@
 import { getVerifiedSession } from "@/lib/auth";
+import { requestedVersion, versionConflict } from "@/lib/concurrency";
 import { prisma } from "@/lib/prisma";
 
 function positiveInteger(value: unknown) {
@@ -17,14 +18,15 @@ export async function POST(
   const exerciseId = typeof body?.exerciseId === "string" ? body.exerciseId : "";
   const setCount = body?.setCount;
   const targetValue = body?.targetValue;
-  if (!exerciseId || !positiveInteger(setCount) || !positiveInteger(targetValue)) {
+  const version = requestedVersion(body?.version);
+  if (!version || !exerciseId || !positiveInteger(setCount) || !positiveInteger(targetValue)) {
     return Response.json({ error: "Invalid Planned Exercise targets" }, { status: 400 });
   }
 
   const [workoutDay, exercise] = await Promise.all([
     prisma.workoutDay.findFirst({
       where: { id: dayId, workoutPlanId: planId, workoutPlan: { userId: session.user.id } },
-      select: { id: true },
+      select: { id: true, name: true, suggestedWeekday: true, version: true },
     }),
     prisma.exercise.findFirst({
       where: { id: exerciseId, userId: session.user.id },
@@ -34,6 +36,7 @@ export async function POST(
   if (!workoutDay || !exercise) {
     return Response.json({ error: "Workout Day or Exercise not found" }, { status: 404 });
   }
+  if (workoutDay.version !== version) return versionConflict(workoutDay, "Workout Day changed on another device");
 
   const weight = body?.weight;
   const weightUnit = body?.weightUnit;
@@ -47,16 +50,30 @@ export async function POST(
     return Response.json({ error: "Bodyweight Exercises cannot prescribe external weight" }, { status: 400 });
   }
 
-  const plannedExercise = await prisma.plannedExercise.create({
-    data: {
-      workoutDayId: workoutDay.id,
-      exerciseId: exercise.id,
-      setCount: Number(setCount),
-      targetValue: Number(targetValue),
-      weightGrams,
-    },
-    select: { id: true, exerciseId: true, setCount: true, targetValue: true, weightGrams: true },
+  const plannedExercise = await prisma.$transaction(async (tx) => {
+    const lockedDay = await tx.workoutDay.updateMany({
+      where: { id: workoutDay.id, workoutPlanId: planId, workoutPlan: { userId: session.user.id }, version },
+      data: { version: { increment: 1 } },
+    });
+    if (lockedDay.count === 0) return null;
+    return tx.plannedExercise.create({
+      data: {
+        workoutDayId: workoutDay.id,
+        exerciseId: exercise.id,
+        setCount: Number(setCount),
+        targetValue: Number(targetValue),
+        weightGrams,
+      },
+      select: { id: true, exerciseId: true, setCount: true, targetValue: true, weightGrams: true, version: true },
+    });
   });
+  if (!plannedExercise) {
+    const latest = await prisma.workoutDay.findUniqueOrThrow({
+      where: { id: workoutDay.id },
+      select: { id: true, name: true, suggestedWeekday: true, version: true },
+    });
+    return versionConflict(latest, "Workout Day changed on another device");
+  }
   return Response.json({ plannedExercise }, { status: 201 });
 }
 

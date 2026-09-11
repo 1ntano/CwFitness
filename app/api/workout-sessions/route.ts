@@ -65,6 +65,7 @@ export async function POST(request: Request) {
         localStartDate,
         startedAt: now,
         lastHeartbeatAt: now,
+        editingDeviceId: session.session.id,
         exercises: { create: day.plannedExercises.map((planned) => ({
           exerciseId: planned.exerciseId,
           exerciseName: planned.exercise.name,

@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const exercises = await prisma.exercise.findMany({
     where: { userId: session.user.id },
     orderBy: { createdAt: "asc" },
-    select: { id: true, name: true, resistanceType: true, targetType: true },
+    select: { id: true, name: true, resistanceType: true, targetType: true, version: true },
   });
   return Response.json({ exercises });
 }
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       targetType: targetType as (typeof targetTypes)[number],
       userId: session.user.id,
     },
-    select: { id: true, name: true, resistanceType: true, targetType: true },
+    select: { id: true, name: true, resistanceType: true, targetType: true, version: true },
   });
   return Response.json({ exercise }, { status: 201 });
 }

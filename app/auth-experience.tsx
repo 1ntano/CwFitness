@@ -17,6 +17,7 @@ export function AuthExperience() {
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [user, setUser] = useState<User | null>(null);
+  const [deviceId, setDeviceId] = useState("");
   const [message, setMessage] = useState("");
   const [messageTone, setMessageTone] = useState<"error" | "success">("error");
   const [lastEmail, setLastEmail] = useState("");
@@ -24,7 +25,7 @@ export function AuthExperience() {
 
   async function loadSession() {
     const response = await fetch("/api/auth/get-session?disableCookieCache=true", { cache: "no-store" });
-    const session = (await response.json()) as { user?: User } | null;
+    const session = (await response.json()) as { user?: User; session?: { id: string } } | null;
     if (!session?.user?.emailVerified) {
       await fetch("/api/auth/sign-out", {
         method: "POST",
@@ -34,6 +35,7 @@ export function AuthExperience() {
       return false;
     }
     setUser(session.user);
+    setDeviceId(session.session?.id ?? "");
     return true;
   }
 
@@ -137,7 +139,7 @@ export function AuthExperience() {
     setBusy(false);
   }
 
-  if (user) return <WorkoutWorkspace user={user} onSignOut={signOut} onAccountDeleted={() => setUser(null)} />;
+  if (user) return <WorkoutWorkspace user={user} deviceId={deviceId} onSignOut={signOut} onAccountDeleted={() => setUser(null)} />;
 
   return (
     <AuthShell>

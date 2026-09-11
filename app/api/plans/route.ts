@@ -15,6 +15,7 @@ export async function GET(request: Request) {
     select: {
       id: true,
       name: true,
+      version: true,
       archivedAt: true,
       workoutDays: {
         orderBy: { createdAt: "asc" },
@@ -22,6 +23,7 @@ export async function GET(request: Request) {
           id: true,
           name: true,
           suggestedWeekday: true,
+          version: true,
           plannedExercises: {
             orderBy: { createdAt: "asc" },
             select: {
@@ -30,12 +32,14 @@ export async function GET(request: Request) {
               setCount: true,
               targetValue: true,
               weightGrams: true,
+              version: true,
               exercise: {
                 select: {
                   id: true,
                   name: true,
                   resistanceType: true,
                   targetType: true,
+                  version: true,
                 },
               },
             },
@@ -64,7 +68,7 @@ export async function POST(request: Request) {
 
   const plan = await prisma.workoutPlan.create({
     data: { name, userId: session.user.id },
-    select: { id: true, name: true, workoutDays: true },
+    select: { id: true, name: true, version: true, workoutDays: true },
   });
 
   return Response.json({ plan }, { status: 201 });

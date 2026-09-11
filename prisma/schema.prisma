@@ -77,6 +77,7 @@ model WorkoutPlan {
   id              String           @id @default(cuid())
   name            String
   userId          String
+  version         Int              @default(1)
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   archivedAt      DateTime?
@@ -104,6 +105,7 @@ model Exercise {
   resistanceType   ResistanceType
   targetType       TargetType
   userId           String
+  version          Int               @default(1)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -119,6 +121,7 @@ model WorkoutDay {
   name             String
   suggestedWeekday Int?
   workoutPlanId    String
+  version          Int               @default(1)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   workoutPlan      WorkoutPlan       @relation(fields: [workoutPlanId], references: [id], onDelete: Cascade)
@@ -136,6 +139,7 @@ model PlannedExercise {
   setCount     Int
   targetValue  Int
   weightGrams  Int?
+  version      Int        @default(1)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   workoutDay   WorkoutDay @relation(fields: [workoutDayId], references: [id], onDelete: Cascade)
@@ -175,6 +179,8 @@ model WorkoutSession {
   completedAt         DateTime?
   trainingTimeSeconds Int?
   lastHeartbeatAt     DateTime?
+  version             Int                  @default(1)
+  editingDeviceId     String?
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)

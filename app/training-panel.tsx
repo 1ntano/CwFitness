@@ -21,6 +21,7 @@ type TrainingPanelProps = {
   exercises: Exercise[];
   busy: boolean;
   weightUnit: "kg" | "lb";
+  canEdit: boolean;
   onRecordSet: (exercise: SessionExercise, setIndex: number, input: SetInput | null) => Promise<void>;
   onAddExercise: (input: AddedExerciseInput) => Promise<void>;
   onRemoveExercise: (exercise: SessionExercise) => Promise<void>;
@@ -28,6 +29,7 @@ type TrainingPanelProps = {
   onResume: () => Promise<void>;
   onComplete: () => Promise<void>;
   onAbandon: () => Promise<void>;
+  onTakeover: () => Promise<void>;
 };
 
 function targetText(exercise: SessionExercise, weightUnit: "kg" | "lb") {
@@ -46,15 +48,17 @@ function resultText(exercise: SessionExercise, result: SetResult | undefined, we
   return metric + weight;
 }
 
-export function TrainingPanel({ session, exercises: availableExercises, busy, weightUnit, onRecordSet, onAddExercise, onRemoveExercise, onPause, onResume, onComplete, onAbandon }: TrainingPanelProps) {
+export function TrainingPanel({ session, exercises: availableExercises, busy, weightUnit, canEdit, onRecordSet, onAddExercise, onRemoveExercise, onPause, onResume, onComplete, onAbandon, onTakeover }: TrainingPanelProps) {
   const exercises = session.exercises.filter((exercise) => exercise.removedAt === null);
   const plannedSetCount = exercises.reduce((total, exercise) => total + exercise.setCount, 0);
   const recordedSetCount = exercises.reduce((total, exercise) => total + exercise.setResults.length, 0);
   const isPaused = session.status === "PAUSED";
+  const readOnly = !canEdit;
   const [selectedExerciseId, setSelectedExerciseId] = useState("");
   const selectedExercise = availableExercises.find((exercise) => exercise.id === selectedExerciseId);
 
   function completeSession() {
+    if (readOnly) return;
     if (recordedSetCount < plannedSetCount && !window.confirm("还有未记录的目标组。完成后它们会按未完成计算，确定结束训练吗？")) return;
     void onComplete();
   }
@@ -67,13 +71,16 @@ export function TrainingPanel({ session, exercises: availableExercises, busy, we
           <h1 id="training-title">完成每组后点击一次即可记录。</h1>
         </div>
         <div className="session-actions">
-          <button className="action-button" type="button" disabled={busy} onClick={isPaused ? onResume : onPause}>
+          {readOnly && <button className="action-button primary" type="button" disabled={busy} onClick={onTakeover}>在此设备接管</button>}
+          <button className="action-button" type="button" disabled={busy || readOnly} onClick={isPaused ? onResume : onPause}>
             {isPaused ? "继续训练" : "挂起"}
           </button>
-          <button className="action-button primary" type="button" disabled={busy} onClick={completeSession}>结束训练</button>
-          <button className="action-button quiet danger" type="button" disabled={busy} onClick={() => { if (window.confirm("放弃本次训练？已记录内容会保留，但不计入进展。")) void onAbandon(); }}>放弃</button>
+          <button className="action-button primary" type="button" disabled={busy || readOnly} onClick={completeSession}>结束训练</button>
+          <button className="action-button quiet danger" type="button" disabled={busy || readOnly} onClick={() => { if (window.confirm("放弃本次训练？已记录内容会保留，但不计入进展。")) void onAbandon(); }}>放弃</button>
         </div>
       </header>
+
+      {readOnly && <p className="workspace-notice recovery" role="status">另一台设备正在编辑这场训练。当前页面为只读，可以刷新查看最新状态或在此设备接管。</p>}
 
       <div className="session-summary" data-testid="active-session">
         <div><span>完成组数</span><strong>{recordedSetCount} / {plannedSetCount}</strong></div>
@@ -97,11 +104,11 @@ export function TrainingPanel({ session, exercises: availableExercises, busy, we
           setSelectedExerciseId("");
         }}
       >
-        <label><span>追加动作</span><select name="exerciseId" required value={selectedExerciseId} onChange={(event) => setSelectedExerciseId(event.target.value)} disabled={busy || isPaused}><option value="">选择动作</option>{availableExercises.map((exercise) => <option key={exercise.id} value={exercise.id}>{exercise.name}</option>)}</select></label>
-        <label><span>组数</span><input name="setCount" type="number" min={1} defaultValue={3} required disabled={busy || isPaused} /></label>
-        <label><span>{selectedExercise?.targetType === "DURATION" ? "目标秒数" : "目标次数"}</span><input name="targetValue" type="number" min={1} defaultValue={selectedExercise?.targetType === "DURATION" ? 30 : 8} required disabled={busy || isPaused} /></label>
-        {selectedExercise?.resistanceType === "WEIGHTED" && <label><span>目标重量（{weightUnit}）</span><input name="weight" type="number" min={0.1} step={0.1} required disabled={busy || isPaused} /></label>}
-        <button className="action-button" type="submit" disabled={busy || isPaused}>追加动作</button>
+        <label><span>追加动作</span><select name="exerciseId" required value={selectedExerciseId} onChange={(event) => setSelectedExerciseId(event.target.value)} disabled={busy || isPaused || readOnly}><option value="">选择动作</option>{availableExercises.map((exercise) => <option key={exercise.id} value={exercise.id}>{exercise.name}</option>)}</select></label>
+        <label><span>组数</span><input name="setCount" type="number" min={1} defaultValue={3} required disabled={busy || isPaused || readOnly} /></label>
+        <label><span>{selectedExercise?.targetType === "DURATION" ? "目标秒数" : "目标次数"}</span><input name="targetValue" type="number" min={1} defaultValue={selectedExercise?.targetType === "DURATION" ? 30 : 8} required disabled={busy || isPaused || readOnly} /></label>
+        {selectedExercise?.resistanceType === "WEIGHTED" && <label><span>目标重量（{weightUnit}）</span><input name="weight" type="number" min={0.1} step={0.1} required disabled={busy || isPaused || readOnly} /></label>}
+        <button className="action-button" type="submit" disabled={busy || isPaused || readOnly}>追加动作</button>
       </form>
 
       <div className="training-list">
@@ -116,7 +123,7 @@ export function TrainingPanel({ session, exercises: availableExercises, busy, we
                 </div>
                 <div className="training-exercise-actions">
                   {exercise.source === "ADDED" && <span className="tag">训练中追加</span>}
-                  <button className="action-button compact quiet danger" type="button" disabled={busy || isPaused} onClick={() => onRemoveExercise(exercise)}>移除动作</button>
+                  <button className="action-button compact quiet danger" type="button" disabled={busy || isPaused || readOnly} onClick={() => onRemoveExercise(exercise)}>移除动作</button>
                 </div>
               </header>
               <div className="set-grid">
@@ -132,11 +139,11 @@ export function TrainingPanel({ session, exercises: availableExercises, busy, we
                       });
                     }}>
                       <span className="set-number">第 {setIndex} 组</span>
-                      <label className="set-input"><span>{exercise.targetType === "REPETITIONS" ? "实际次数" : "实际秒数"}</span><input name="actualValue" type="number" min={0} defaultValue={result?.actualValue ?? exercise.targetValue} required disabled={busy || isPaused} /></label>
-                      {exercise.resistanceType === "WEIGHTED" && <label className="set-input"><span>实际重量（{weightUnit}）</span><input name="actualWeight" type="number" min={0.1} step={0.1} defaultValue={weightFromGrams(result?.actualWeightGrams ?? exercise.weightGrams ?? 0, weightUnit).toFixed(1)} required disabled={busy || isPaused} /></label>}
+                      <label className="set-input"><span>{exercise.targetType === "REPETITIONS" ? "实际次数" : "实际秒数"}</span><input name="actualValue" type="number" min={0} defaultValue={result?.actualValue ?? exercise.targetValue} required disabled={busy || isPaused || readOnly} /></label>
+                      {exercise.resistanceType === "WEIGHTED" && <label className="set-input"><span>实际重量（{weightUnit}）</span><input name="actualWeight" type="number" min={0.1} step={0.1} defaultValue={weightFromGrams(result?.actualWeightGrams ?? exercise.weightGrams ?? 0, weightUnit).toFixed(1)} required disabled={busy || isPaused || readOnly} /></label>}
                       <span className="set-result">{resultText(exercise, result, weightUnit)}</span>
-                      <button className="action-button compact" type="submit" disabled={busy || isPaused}>{result ? "更新记录" : "记录完成"}</button>
-                      <button className="action-button compact quiet" type="button" disabled={busy || isPaused} onClick={() => onRecordSet(exercise, setIndex, null)}>
+                      <button className="action-button compact" type="submit" disabled={busy || isPaused || readOnly}>{result ? "更新记录" : "记录完成"}</button>
+                      <button className="action-button compact quiet" type="button" disabled={busy || isPaused || readOnly} onClick={() => onRecordSet(exercise, setIndex, null)}>
                         跳过
                       </button>
                     </form>
