@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { scoreExercises, workoutSessionHistorySelect, workoutSessionSelect } from "@/lib/workout-sessions";
+import { scoreExercises } from "@/lib/workout-session-domain";
+import { workoutSessionHistorySelect, workoutSessionSelect } from "@/lib/workout-sessions";
 
 function localDate(now: Date, timeZone: string) {
   try {

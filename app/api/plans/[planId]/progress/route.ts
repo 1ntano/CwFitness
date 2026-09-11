@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { scoreExercises } from "@/lib/workout-sessions";
+import { scoreExercises } from "@/lib/workout-session-domain";
 
 export async function GET(request: Request, context: { params: Promise<{ planId: string }> }) {
   const session = await auth.api.getSession({ headers: request.headers });

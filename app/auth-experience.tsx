@@ -65,9 +65,19 @@ export function AuthExperience() {
 
   async function signOut() {
     setBusy(true);
-    await fetch("/api/auth/sign-out", { method: "POST" });
-    setUser(null);
-    setMessage("");
+    const response = await fetch("/api/auth/sign-out", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    if (response.ok) {
+      setMode("sign-in");
+      setShowPassword(false);
+      setUser(null);
+      setMessage("");
+    } else {
+      setMessage(await errorMessage(response));
+    }
     setBusy(false);
   }
 

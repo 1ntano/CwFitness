@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import process from 'node:process';
 
 const root = new URL('../', import.meta.url);
+const testServerName = 'cwfitness-test';
 const databaseUrl = 'postgres://postgres:postgres@127.0.0.1:51214/template1?sslmode=disable';
 const baseUrl = 'http://127.0.0.1:3100';
 const env = {
@@ -10,6 +11,7 @@ const env = {
   BETTER_AUTH_SECRET: 'cwfitness-integration-test-secret-not-for-production',
   BETTER_AUTH_URL: baseUrl,
   TEST_BASE_URL: baseUrl,
+  PLAYWRIGHT_CHANNEL: process.env.PLAYWRIGHT_CHANNEL ?? 'chrome',
 };
 
 function run(command, args, options = {}) {
@@ -28,6 +30,16 @@ function run(command, args, options = {}) {
   });
 }
 
+async function stopServer(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  child.kill();
+  await Promise.race([
+    new Promise((resolve) => child.once('exit', resolve)),
+    new Promise((resolve) => setTimeout(resolve, 5_000)),
+  ]);
+  if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+}
+
 async function waitForServer() {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
@@ -43,19 +55,25 @@ async function waitForServer() {
 const node = process.execPath;
 const prismaCli = new URL('../node_modules/prisma/build/index.js', import.meta.url).pathname.slice(1);
 const nextCli = new URL('../node_modules/next/dist/bin/next', import.meta.url).pathname.slice(1);
+const playwrightCli = new URL('../node_modules/@playwright/test/cli.js', import.meta.url).pathname.slice(1);
 
-await run(node, [prismaCli, 'dev', '--name', 'cwfitness-test', '--port', '51213', '--db-port', '51214', '--shadow-db-port', '51215', '--detach']);
-await run(node, [prismaCli, 'migrate', 'deploy']);
-
-const server = spawn(node, [nextCli, 'dev', '-H', '127.0.0.1', '-p', '3100'], {
-  cwd: root,
-  env,
-  stdio: 'inherit',
-});
+let databaseStarted = false;
+let server;
 
 try {
+  await run(node, [prismaCli, 'dev', '--name', testServerName, '--port', '51213', '--db-port', '51214', '--shadow-db-port', '51215', '--detach']);
+  databaseStarted = true;
+  await run(node, [prismaCli, 'migrate', 'deploy']);
+
+  server = spawn(node, [nextCli, 'dev', '-H', '127.0.0.1', '-p', '3100'], {
+    cwd: root,
+    env,
+    stdio: 'inherit',
+  });
   await waitForServer();
   await run(node, ['--test', 'tests/plans-api.test.mjs']);
+  await run(node, [playwrightCli, 'test']);
 } finally {
-  server.kill();
+  if (server) await stopServer(server);
+  if (databaseStarted) await run(node, [prismaCli, 'dev', 'stop', testServerName]);
 }

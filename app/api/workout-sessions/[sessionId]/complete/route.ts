@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { confirmedActiveDurationMs, ownedSession, scoreExercises, workoutSessionSelect } from "@/lib/workout-sessions";
+import { confirmedActiveDurationMs, scoreExercises } from "@/lib/workout-session-domain";
+import { ownedSession, workoutSessionSelect } from "@/lib/workout-sessions";
 
 export async function POST(request: Request, context: { params: Promise<{ sessionId: string }> }) {
   const authSession = await auth.api.getSession({ headers: request.headers });
