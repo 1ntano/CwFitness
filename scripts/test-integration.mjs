@@ -5,9 +5,13 @@ import { join } from 'node:path';
 import process from 'node:process';
 
 const root = new URL('../', import.meta.url);
-const testServerName = 'cwfitness-test';
-const databaseUrl = 'postgres://postgres:postgres@127.0.0.1:51214/template1?sslmode=disable';
-const baseUrl = 'http://127.0.0.1:3100';
+const testServerName = `cwfitness-test-${process.pid}`;
+const testServerPort = process.env.TEST_SERVER_PORT ?? '51313';
+const testDatabasePort = process.env.TEST_DATABASE_PORT ?? '51314';
+const testShadowDatabasePort = process.env.TEST_SHADOW_DB_PORT ?? '51315';
+const testAppPort = process.env.TEST_APP_PORT ?? '3101';
+const databaseUrl = `postgres://postgres:postgres@127.0.0.1:${testDatabasePort}/template1?sslmode=disable`;
+const baseUrl = `http://127.0.0.1:${testAppPort}`;
 const localEmailOutbox = join(tmpdir(), 'cwfitness-local-email-outbox.jsonl');
 const env = {
   ...process.env,
@@ -16,6 +20,7 @@ const env = {
   BETTER_AUTH_URL: baseUrl,
   TEST_BASE_URL: baseUrl,
   PLAYWRIGHT_CHANNEL: process.env.PLAYWRIGHT_CHANNEL ?? 'chrome',
+  NEXT_DIST_DIR: '.next-test',
   LOCAL_EMAIL_OUTBOX: localEmailOutbox,
   PASSWORD_RESET_EXPIRES_IN_SECONDS: '2',
 };
@@ -46,6 +51,31 @@ async function stopServer(child) {
   if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
 }
 
+async function startPrismaDev() {
+  return new Promise((resolve, reject) => {
+    const child = spawn(node, [prismaCli, 'dev', '--name', testServerName, '--port', testServerPort, '--db-port', testDatabasePort, '--shadow-db-port', testShadowDatabasePort, '--detach'], {
+      cwd: root,
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let output = '';
+    const handleOutput = (chunk) => {
+      const text = chunk.toString();
+      output += text;
+      process.stdout.write(text);
+      const match = output.match(/postgres:\/\/[^\s]+/);
+      if (match) env.DATABASE_URL = match[0];
+    };
+    child.stdout.on('data', handleOutput);
+    child.stderr.on('data', handleOutput);
+    child.once('error', reject);
+    child.once('exit', (code) => {
+      if (code === 0 && env.DATABASE_URL.startsWith('postgres://')) resolve();
+      else reject(new Error(`Prisma dev exited without a database URL (code ${code})`));
+    });
+  });
+}
+
 async function waitForServer() {
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
@@ -68,11 +98,11 @@ let server;
 
 try {
   await rm(localEmailOutbox, { force: true });
-  await run(node, [prismaCli, 'dev', '--name', testServerName, '--port', '51213', '--db-port', '51214', '--shadow-db-port', '51215', '--detach']);
+  await startPrismaDev();
   databaseStarted = true;
   await run(node, [prismaCli, 'migrate', 'deploy']);
 
-  server = spawn(node, [nextCli, 'dev', '-H', '127.0.0.1', '-p', '3100'], {
+  server = spawn(node, [nextCli, 'dev', '-H', '127.0.0.1', '-p', testAppPort], {
     cwd: root,
     env,
     stdio: 'inherit',

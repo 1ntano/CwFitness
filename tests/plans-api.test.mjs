@@ -289,6 +289,7 @@ test('User composes a Workout Plan from owned Exercises and Workout Days', async
       name: 'Bench Press',
       resistanceType: 'WEIGHTED',
       targetType: 'REPETITIONS',
+      muscleGroup: 'FULL_BODY',
     }),
   });
   assert.equal(createdExercise.status, 201);
@@ -297,7 +298,7 @@ test('User composes a Workout Plan from owned Exercises and Workout Days', async
   const renamed = await request(`/api/exercises/${exercise.id}`, {
     method: 'PATCH',
     headers: { cookie: aliceCookie },
-    body: JSON.stringify({ name: 'Barbell Bench Press', version: exercise.version }),
+    body: JSON.stringify({ name: 'Barbell Bench Press', version: exercise.version, muscleGroup: exercise.muscleGroup }),
   });
   assert.equal(renamed.status, 200);
   assert.equal((await renamed.json()).exercise.id, exercise.id);
@@ -308,6 +309,9 @@ test('User composes a Workout Plan from owned Exercises and Workout Days', async
     name: 'Barbell Bench Press',
     resistanceType: 'WEIGHTED',
     targetType: 'REPETITIONS',
+    muscleGroup: 'FULL_BODY',
+    defaultTargetValue: 8,
+    defaultWeightGrams: null,
     version: 2,
   }]);
   const bobExercises = await request('/api/exercises', { headers: { cookie: bobCookie } });
@@ -362,7 +366,7 @@ test('User composes a Workout Plan from owned Exercises and Workout Days', async
 
 async function createExercise(cookie, data) {
   const response = await request('/api/exercises', {
-    method: 'POST', headers: { cookie }, body: JSON.stringify(data),
+    method: 'POST', headers: { cookie }, body: JSON.stringify({ muscleGroup: 'FULL_BODY', ...data }),
   });
   assert.equal(response.status, 201);
   return (await response.json()).exercise;
@@ -512,7 +516,7 @@ test('User starts one snapshotted Workout Session and completes its timed lifecy
   }]);
 
   const renamed = await request(`/api/exercises/${exercise.id}`, {
-    method: 'PATCH', headers: { cookie }, body: JSON.stringify({ name: 'Competition Back Squat', version: exercise.version }),
+    method: 'PATCH', headers: { cookie }, body: JSON.stringify({ name: 'Competition Back Squat', version: exercise.version, muscleGroup: exercise.muscleGroup }),
   });
   assert.equal(renamed.status, 200);
   const renamedHistory = await request('/api/workout-sessions', { headers: { cookie } });

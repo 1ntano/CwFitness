@@ -8,3 +8,4 @@ generated/
 playwright-report/
 test-results/
 .local-mail/
+.next-test/
