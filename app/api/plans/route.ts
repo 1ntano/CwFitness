@@ -1,8 +1,8 @@
-import { auth } from "@/lib/auth";
+import { getVerifiedSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 async function currentUser(request: Request) {
-  return auth.api.getSession({ headers: request.headers });
+  return getVerifiedSession(request);
 }
 
 export async function GET(request: Request) {

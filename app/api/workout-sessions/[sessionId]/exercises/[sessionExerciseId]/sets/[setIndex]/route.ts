@@ -1,9 +1,9 @@
-import { auth } from "@/lib/auth";
+import { getVerifiedSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { weightInGrams } from "@/lib/weights";
 
 export async function PUT(request: Request, context: { params: Promise<{ sessionId: string; sessionExerciseId: string; setIndex: string }> }) {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await getVerifiedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
   const { sessionId, sessionExerciseId, setIndex: rawIndex } = await context.params;
   const setIndex = Number(rawIndex);

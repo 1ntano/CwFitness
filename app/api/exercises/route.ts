@@ -1,11 +1,11 @@
-import { auth } from "@/lib/auth";
+import { getVerifiedSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const resistanceTypes = ["WEIGHTED", "BODYWEIGHT"] as const;
 const targetTypes = ["REPETITIONS", "DURATION"] as const;
 
 export async function GET(request: Request) {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await getVerifiedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const exercises = await prisma.exercise.findMany({
@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await getVerifiedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;

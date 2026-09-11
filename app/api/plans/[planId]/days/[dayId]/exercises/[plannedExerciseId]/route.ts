@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { getVerifiedSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { weightInGrams } from "@/lib/weights";
 
@@ -47,7 +47,7 @@ export async function PATCH(
   request: Request,
   context: { params: Promise<{ planId: string; dayId: string; plannedExerciseId: string }> },
 ) {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await getVerifiedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { planId, dayId, plannedExerciseId } = await context.params;
@@ -79,7 +79,7 @@ export async function DELETE(
   request: Request,
   context: { params: Promise<{ planId: string; dayId: string; plannedExerciseId: string }> },
 ) {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await getVerifiedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { planId, dayId, plannedExerciseId } = await context.params;

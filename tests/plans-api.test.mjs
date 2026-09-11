@@ -1,7 +1,25 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { createEmailVerificationToken } from 'better-auth/api';
+import pg from 'pg';
+
+import { waitForLocalEmail } from './helpers/local-email-outbox.mjs';
+
 const baseUrl = process.env.TEST_BASE_URL ?? 'http://127.0.0.1:3100';
+
+async function setEmailVerified(email, emailVerified) {
+  const normalizedEmail = email.toLowerCase();
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    const result = await client.query('UPDATE "user" SET "emailVerified" = $1 WHERE email = $2 RETURNING email, "emailVerified"', [emailVerified, normalizedEmail]);
+    assert.equal(result.rowCount, 1);
+    assert.equal(result.rows[0].emailVerified, emailVerified);
+  } finally {
+    await client.end();
+  }
+}
 
 async function request(path, options = {}) {
   return fetch(`${baseUrl}${path}`, {
@@ -15,6 +33,10 @@ async function request(path, options = {}) {
 }
 
 async function signUp(label) {
+  return (await registerVerifiedUser(label)).cookie;
+}
+
+async function registerVerifiedUser(label) {
   const email = `${label}-${crypto.randomUUID()}@example.com`;
   const response = await request('/api/auth/sign-up/email', {
     method: 'POST',
@@ -22,9 +44,18 @@ async function signUp(label) {
   });
 
   if (response.status !== 200) assert.fail(`sign-up failed: ${await response.text()}`);
-  const cookie = response.headers.getSetCookie().map((value) => value.split(';', 1)[0]).join('; ');
-  assert.ok(cookie, 'sign-up must establish a session cookie');
-  return cookie;
+  assert.deepEqual(response.headers.getSetCookie(), [], 'unverified sign-up must not establish a session');
+  const message = await waitForLocalEmail({ to: email, kind: 'verification' });
+  const verificationUrl = new URL(message.url);
+  const verification = await request(`${verificationUrl.pathname}${verificationUrl.search}`, { redirect: 'manual' });
+  assert.equal(verification.status, 302);
+  const setCookies = verification.headers.getSetCookie();
+  const cookie = setCookies.map((value) => value.split(';', 1)[0]).join('; ');
+  assert.ok(cookie, 'verification must establish a session cookie');
+  assert.match(setCookies.join('; '), /HttpOnly/);
+  assert.match(setCookies.join('; '), /SameSite=Lax/);
+  if (baseUrl.startsWith('https:')) assert.match(setCookies.join('; '), /Secure/);
+  return { cookie, email: email.toLowerCase() };
 }
 
 test('Home renders the interactive Split authentication flow', async () => {
@@ -33,6 +64,145 @@ test('Home renders the interactive Split authentication flow', async () => {
   const html = await response.text();
   assert.match(html, /data-testid="auth-form"/);
   assert.match(html, /继续训练。/);
+});
+
+test('Sign-up remains pending until the User verifies their email', async () => {
+  const email = `unverified-${crypto.randomUUID()}@example.com`;
+  const response = await request('/api/auth/sign-up/email', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'Unverified User', email, password: 'test-password-123' }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.headers.getSetCookie(), []);
+  const deniedSignIn = await request('/api/auth/sign-in/email', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'test-password-123' }),
+  });
+  assert.equal(deniedSignIn.status, 403);
+
+  const message = await waitForLocalEmail({ to: email, kind: 'verification' });
+  assert.match(message.url, /\/api\/auth\/verify-email\?token=/);
+});
+
+test('Email verification rejects invalid and expired links and safely handles reuse', async () => {
+  const email = `verification-errors-${crypto.randomUUID()}@example.com`;
+  await request('/api/auth/sign-up/email', {
+    method: 'POST',
+    body: JSON.stringify({ name: 'Verification Errors', email, password: 'test-password-123' }),
+  });
+
+  const invalid = await request('/api/auth/verify-email?token=invalid&callbackURL=%2Fverify-email%2Fresult', { redirect: 'manual' });
+  assert.equal(invalid.status, 302);
+  assert.match(invalid.headers.get('location') ?? '', /error=INVALID_TOKEN/);
+
+  const expiredToken = await createEmailVerificationToken(process.env.BETTER_AUTH_SECRET, email, undefined, -1);
+  const expired = await request(`/api/auth/verify-email?token=${encodeURIComponent(expiredToken)}&callbackURL=%2Fverify-email%2Fresult`, { redirect: 'manual' });
+  assert.equal(expired.status, 302);
+  assert.match(expired.headers.get('location') ?? '', /error=TOKEN_EXPIRED/);
+
+  const message = await waitForLocalEmail({ to: email, kind: 'verification' });
+  const verificationUrl = new URL(message.url);
+  const firstUse = await request(`${verificationUrl.pathname}${verificationUrl.search}`, { redirect: 'manual' });
+  assert.equal(firstUse.status, 302);
+  assert.doesNotMatch(firstUse.headers.get('location') ?? '', /error=/);
+
+  const reuse = await request(`${verificationUrl.pathname}${verificationUrl.search}`, { redirect: 'manual' });
+  assert.equal(reuse.status, 302);
+  assert.doesNotMatch(reuse.headers.get('location') ?? '', /error=/);
+});
+
+test('Forgot-password responses do not reveal account existence and reset changes the password', async () => {
+  const { email } = await registerVerifiedUser('PasswordReset');
+  const missingEmail = `missing-${crypto.randomUUID()}@example.com`;
+
+  const existing = await request('/api/auth/request-password-reset', {
+    method: 'POST',
+    body: JSON.stringify({ email, redirectTo: `${baseUrl}/reset-password` }),
+  });
+  const missing = await request('/api/auth/request-password-reset', {
+    method: 'POST',
+    body: JSON.stringify({ email: missingEmail, redirectTo: `${baseUrl}/reset-password` }),
+  });
+  assert.equal(existing.status, 200);
+  assert.equal(missing.status, 200);
+  assert.deepEqual(await existing.json(), await missing.json());
+
+  const message = await waitForLocalEmail({ to: email, kind: 'password-reset' });
+  const resetUrl = new URL(message.url);
+  const callback = await request(`${resetUrl.pathname}${resetUrl.search}`, { redirect: 'manual' });
+  assert.equal(callback.status, 302);
+  const token = new URL(callback.headers.get('location'), baseUrl).searchParams.get('token');
+  assert.ok(token);
+
+  const reset = await request('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, newPassword: 'new-test-password-456' }),
+  });
+  assert.equal(reset.status, 200);
+  const invalidReset = await request('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token: 'invalid-reset-token', newPassword: 'another-test-password' }),
+  });
+  assert.equal(invalidReset.status, 400);
+
+  const oldPassword = await request('/api/auth/sign-in/email', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'test-password-123' }),
+  });
+  assert.equal(oldPassword.status, 401);
+  const newPassword = await request('/api/auth/sign-in/email', {
+    method: 'POST',
+    body: JSON.stringify({ email, password: 'new-test-password-456' }),
+  });
+  assert.equal(newPassword.status, 200);
+});
+
+test('Expired password reset tokens fail safely', async () => {
+  const { email } = await registerVerifiedUser('ExpiredReset');
+  await request('/api/auth/request-password-reset', {
+    method: 'POST',
+    body: JSON.stringify({ email, redirectTo: `${baseUrl}/reset-password` }),
+  });
+  const message = await waitForLocalEmail({ to: email, kind: 'password-reset' });
+  const resetUrl = new URL(message.url);
+  const callback = await request(`${resetUrl.pathname}${resetUrl.search}`, { redirect: 'manual' });
+  const token = new URL(callback.headers.get('location'), baseUrl).searchParams.get('token');
+
+  await new Promise((resolve) => setTimeout(resolve, 2_100));
+  const reset = await request('/api/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, newPassword: 'expired-reset-password' }),
+  });
+  assert.equal(reset.status, 400);
+});
+
+test('Sign-out invalidates the current Session cookie', async () => {
+  const { cookie } = await registerVerifiedUser('SignOut');
+  assert.equal((await request('/api/plans', { headers: { cookie } })).status, 200);
+
+  const signOut = await request('/api/auth/sign-out', {
+    method: 'POST',
+    headers: { cookie },
+    body: '{}',
+  });
+  assert.equal(signOut.status, 200);
+  const clearedCookie = signOut.headers.getSetCookie().join('; ');
+  assert.match(clearedCookie, /HttpOnly/);
+  assert.match(clearedCookie, /SameSite=Lax/);
+  if (baseUrl.startsWith('https:')) assert.match(clearedCookie, /Secure/);
+  assert.equal((await request('/api/plans', { headers: { cookie } })).status, 401);
+});
+
+test('An unverified legacy Session cannot access protected APIs', async () => {
+  const { cookie, email } = await registerVerifiedUser('LegacyUnverified');
+  await setEmailVerified(email, false);
+
+  const sessionResponse = await request('/api/auth/get-session?disableCookieCache=true', { headers: { cookie } });
+  assert.equal(sessionResponse.status, 200);
+  assert.equal((await sessionResponse.json()).user.emailVerified, false);
+  const protectedResponse = await request('/api/plans', { headers: { cookie } });
+  assert.equal(protectedResponse.status, 401);
 });
 
 test('Workout Plans are isolated by the authenticated User', async () => {

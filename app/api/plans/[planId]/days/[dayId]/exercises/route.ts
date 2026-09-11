@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { getVerifiedSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 function positiveInteger(value: unknown) {
@@ -9,7 +9,7 @@ export async function POST(
   request: Request,
   context: RouteContext<"/api/plans/[planId]/days/[dayId]/exercises">,
 ) {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await getVerifiedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { planId, dayId } = await context.params;

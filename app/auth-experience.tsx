@@ -1,10 +1,11 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { AuthShell } from "./auth-shell";
 import { WorkoutWorkspace } from "./workout-workspace";
 
-type User = { name: string; email: string };
-type AuthMode = "sign-in" | "sign-up";
+type User = { name: string; email: string; emailVerified: boolean };
+type AuthMode = "sign-in" | "sign-up" | "forgot-password";
 
 async function errorMessage(response: Response) {
   const body = (await response.json().catch(() => null)) as { message?: string } | null;
@@ -17,11 +18,21 @@ export function AuthExperience() {
   const [busy, setBusy] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"error" | "success">("error");
+  const [lastEmail, setLastEmail] = useState("");
+  const [canResendVerification, setCanResendVerification] = useState(false);
 
   async function loadSession() {
-    const response = await fetch("/api/auth/get-session", { cache: "no-store" });
+    const response = await fetch("/api/auth/get-session?disableCookieCache=true", { cache: "no-store" });
     const session = (await response.json()) as { user?: User } | null;
-    if (!session?.user) return false;
+    if (!session?.user?.emailVerified) {
+      await fetch("/api/auth/sign-out", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      });
+      return false;
+    }
     setUser(session.user);
     return true;
   }
@@ -43,23 +54,66 @@ export function AuthExperience() {
     setBusy(true);
     setMessage("");
     const form = new FormData(event.currentTarget);
-    const payload = {
-      ...(mode === "sign-up" ? { name: String(form.get("name")) } : {}),
-      email: String(form.get("email")),
-      password: String(form.get("password")),
-    };
-    const response = await fetch(`/api/auth/${mode}/email`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) {
-      setMessage(await errorMessage(response));
+    const email = String(form.get("email"));
+    setLastEmail(email);
+
+    if (mode === "forgot-password") {
+      const response = await fetch("/api/auth/request-password-reset", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, redirectTo: `${window.location.origin}/reset-password` }),
+      });
+      setMessageTone(response.ok ? "success" : "error");
+      setMessage(response.ok
+        ? "如果该邮箱存在，重置密码邮件已发送。"
+        : await errorMessage(response));
       setBusy(false);
       return;
     }
+
+    const response = await fetch(`/api/auth/${mode === "sign-up" ? "sign-up" : "sign-in"}/email`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        ...(mode === "sign-up" ? { name: String(form.get("name")) } : {}),
+        email,
+        password: String(form.get("password")),
+      }),
+    });
+    if (!response.ok) {
+      setMessageTone("error");
+      setMessage(await errorMessage(response));
+      setCanResendVerification(response.status === 403);
+      setBusy(false);
+      return;
+    }
+    if (mode === "sign-up") {
+      setMode("sign-in");
+      setMessageTone("success");
+      setMessage("验证邮件已发送。请打开邮件中的链接完成验证。");
+      setBusy(false);
+      return;
+    }
+
     const loaded = await loadSession();
+    setMessageTone("success");
     setMessage(loaded ? "" : "登录成功，正在恢复会话…");
+    setBusy(false);
+  }
+
+  async function resendVerification() {
+    if (!lastEmail) return;
+    setBusy(true);
+    const response = await fetch("/api/auth/send-verification-email", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: lastEmail, callbackURL: "/verify-email/result" }),
+    });
+    setMessageTone(response.ok ? "success" : "error");
+    setMessage(response.ok
+      ? "如果该邮箱仍未验证，新的验证邮件已发送。"
+      : await errorMessage(response));
+    setCanResendVerification(false);
     setBusy(false);
   }
 
@@ -75,7 +129,9 @@ export function AuthExperience() {
       setShowPassword(false);
       setUser(null);
       setMessage("");
+      setCanResendVerification(false);
     } else {
+      setMessageTone("error");
       setMessage(await errorMessage(response));
     }
     setBusy(false);
@@ -84,38 +140,34 @@ export function AuthExperience() {
   if (user) return <WorkoutWorkspace user={user} onSignOut={signOut} onAccountDeleted={() => setUser(null)} />;
 
   return (
-    <main className="app-shell">
-      <div className="grain" aria-hidden="true" />
-      <a className="brand" href="#main-content" aria-label="CwFitness 首页">
-        <span className="brand-mark" aria-hidden="true" />
-        CwFitness
-      </a>
-      <section className="split-layout" id="main-content">
-        <div className="story">
-          <p className="eyebrow">下一组，由你定义</p>
-          <h1>每一次完成，<br />都有迹可循。</h1>
-          <p>围绕你的训练计划记录每一组，在恰当的时间看见真正的进步。</p>
+    <AuthShell>
+      <form className="auth-form" onSubmit={submitAuth} data-testid="auth-form">
+        <p className="eyebrow">{mode === "sign-in" ? "欢迎回来" : mode === "sign-up" ? "建立你的训练空间" : "找回登录方式"}</p>
+        <h2>{mode === "sign-in" ? "继续训练。" : mode === "sign-up" ? "从第一组开始。" : "重新设置密码。"}</h2>
+        <p className="intro">
+          {mode === "sign-in"
+            ? "登录以查看今天的计划，并从上次结束的地方继续。"
+            : mode === "sign-up"
+              ? "你的计划和训练记录会安全地归属于这个账户。"
+              : "输入邮箱，我们会发送一次性密码重置链接。"}
+        </p>
+        {mode === "sign-up" && <label className="field"><span className="field-label">称呼</span><span className="input-wrap"><input name="name" autoComplete="name" placeholder="你的名字" required /></span></label>}
+        <label className="field"><span className="field-label">邮箱</span><span className="input-wrap"><input name="email" type="email" autoComplete="email" inputMode="email" placeholder="you@example.com" required /></span></label>
+        {mode !== "forgot-password" && <label className="field">
+          <span className="field-label">密码</span>
+          <span className="input-wrap password-wrap">
+            <input name="password" type={showPassword ? "text" : "password"} autoComplete={mode === "sign-in" ? "current-password" : "new-password"} placeholder="至少 8 个字符" required minLength={8} />
+            <button className="reveal" type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "隐藏密码" : "显示密码"}>{showPassword ? "隐藏" : "显示"}</button>
+          </span>
+        </label>}
+        {message && <p className={`status ${messageTone}`} role={messageTone === "error" ? "alert" : "status"}>{message}</p>}
+        {canResendVerification && <button className="text-button" type="button" disabled={busy} onClick={resendVerification}>重新发送验证邮件</button>}
+        <button className="primary-button" type="submit" disabled={busy}>{busy ? "请稍候…" : mode === "sign-in" ? "登录" : mode === "sign-up" ? "创建账户" : "发送重置链接"}</button>
+        <div className="auth-links">
+          {mode === "sign-in" && <button className="text-button" type="button" onClick={() => { setMode("forgot-password"); setMessage(""); }}>忘记密码？</button>}
+          <button className="text-button" type="button" onClick={() => { setMode(mode === "sign-in" ? "sign-up" : "sign-in"); setMessage(""); }}>{mode === "sign-in" ? "创建账户" : "返回登录"}</button>
         </div>
-        <div className="content-side">
-          <form className="auth-form" onSubmit={submitAuth} data-testid="auth-form">
-            <p className="eyebrow">{mode === "sign-in" ? "欢迎回来" : "建立你的训练空间"}</p>
-            <h2>{mode === "sign-in" ? "继续训练。" : "从第一组开始。"}</h2>
-            <p className="intro">{mode === "sign-in" ? "登录以查看今天的计划，并从上次结束的地方继续。" : "你的计划和训练记录会安全地归属于这个账户。"}</p>
-            {mode === "sign-up" && <label className="field"><span className="field-label">称呼</span><span className="input-wrap"><input name="name" autoComplete="name" placeholder="你的名字" required /></span></label>}
-            <label className="field"><span className="field-label">邮箱</span><span className="input-wrap"><input name="email" type="email" autoComplete="email" inputMode="email" placeholder="you@example.com" required /></span></label>
-            <label className="field">
-              <span className="field-label">密码</span>
-              <span className="input-wrap password-wrap">
-                <input name="password" type={showPassword ? "text" : "password"} autoComplete={mode === "sign-in" ? "current-password" : "new-password"} placeholder="至少 8 个字符" required minLength={8} />
-                <button className="reveal" type="button" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "隐藏密码" : "显示密码"}>{showPassword ? "隐藏" : "显示"}</button>
-              </span>
-            </label>
-            {message && <p className="status error" role="alert">{message}</p>}
-            <button className="primary-button" type="submit" disabled={busy}>{busy ? "请稍候…" : mode === "sign-in" ? "登录" : "创建账户"}</button>
-            <p className="auth-switch">{mode === "sign-in" ? "第一次使用 CwFitness？" : "已经拥有账户？"}<button className="text-button" type="button" onClick={() => { setMode(mode === "sign-in" ? "sign-up" : "sign-in"); setMessage(""); }}>{mode === "sign-in" ? "创建账户" : "返回登录"}</button></p>
-          </form>
-        </div>
-      </section>
-    </main>
+      </form>
+    </AuthShell>
   );
 }

@@ -1,10 +1,14 @@
 import { spawn } from 'node:child_process';
+import { rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import process from 'node:process';
 
 const root = new URL('../', import.meta.url);
 const testServerName = 'cwfitness-test';
 const databaseUrl = 'postgres://postgres:postgres@127.0.0.1:51214/template1?sslmode=disable';
 const baseUrl = 'http://127.0.0.1:3100';
+const localEmailOutbox = join(tmpdir(), 'cwfitness-local-email-outbox.jsonl');
 const env = {
   ...process.env,
   DATABASE_URL: databaseUrl,
@@ -12,6 +16,8 @@ const env = {
   BETTER_AUTH_URL: baseUrl,
   TEST_BASE_URL: baseUrl,
   PLAYWRIGHT_CHANNEL: process.env.PLAYWRIGHT_CHANNEL ?? 'chrome',
+  LOCAL_EMAIL_OUTBOX: localEmailOutbox,
+  PASSWORD_RESET_EXPIRES_IN_SECONDS: '2',
 };
 
 function run(command, args, options = {}) {
@@ -61,6 +67,7 @@ let databaseStarted = false;
 let server;
 
 try {
+  await rm(localEmailOutbox, { force: true });
   await run(node, [prismaCli, 'dev', '--name', testServerName, '--port', '51213', '--db-port', '51214', '--shadow-db-port', '51215', '--detach']);
   databaseStarted = true;
   await run(node, [prismaCli, 'migrate', 'deploy']);

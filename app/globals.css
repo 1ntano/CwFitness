@@ -12,6 +12,7 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important}}
 @media(prefers-reduced-transparency:reduce){.auth-form,.dashboard,.plan-card{background:#111414!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}}
 @media(prefers-contrast:more){.auth-form,.dashboard,.plan-card{background:rgba(5,7,7,.96)}.input-wrap input{border-color:rgba(255,255,255,.65)}}
+.auth-links{display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;margin-top:18px}.auth-links .text-button{margin-left:0}a.primary-button{display:flex;align-items:center;justify-content:center;text-decoration:none}
 
 /* Authenticated workspace */
 .workspace-shell{min-height:100vh;background:radial-gradient(circle at 82% 0%,rgba(73,103,91,.24),transparent 30%),#090c0c;color:var(--text)}

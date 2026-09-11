@@ -1,8 +1,8 @@
-import { auth } from "@/lib/auth";
+import { getVerifiedSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: Request, context: RouteContext<"/api/plans/[planId]/days">) {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await getVerifiedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { planId } = await context.params;

@@ -7,3 +7,4 @@ generated/
 *.tsbuildinfo
 playwright-report/
 test-results/
+.local-mail/

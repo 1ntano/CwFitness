@@ -1,8 +1,8 @@
-import { auth } from "@/lib/auth";
+import { getVerifiedSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: Request, context: RouteContext<"/api/exercises/[exerciseId]">) {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await getVerifiedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { exerciseId } = await context.params;
@@ -30,7 +30,7 @@ export async function GET(request: Request, context: RouteContext<"/api/exercise
 }
 
 export async function PATCH(request: Request, context: RouteContext<"/api/exercises/[exerciseId]">) {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await getVerifiedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { exerciseId } = await context.params;
@@ -52,7 +52,7 @@ export async function PATCH(request: Request, context: RouteContext<"/api/exerci
 }
 
 export async function DELETE(request: Request, context: RouteContext<"/api/exercises/[exerciseId]">) {
-  const session = await auth.api.getSession({ headers: request.headers });
+  const session = await getVerifiedSession(request);
   if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const { exerciseId } = await context.params;

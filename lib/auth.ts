@@ -1,6 +1,7 @@
 import { prismaAdapter } from "@better-auth/prisma-adapter";
 import { betterAuth } from "better-auth";
 import { prisma } from "@/lib/prisma";
+import { sendAccountEmail } from "@/lib/email";
 
 const trustedOrigins = [process.env.BETTER_AUTH_URL ?? "http://127.0.0.1:3100", ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",") ?? [])]
   .map((origin) => origin.trim())
@@ -8,6 +9,45 @@ const trustedOrigins = [process.env.BETTER_AUTH_URL ?? "http://127.0.0.1:3100", 
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
-  emailAndPassword: { enabled: true },
+  emailAndPassword: {
+    enabled: true,
+    requireEmailVerification: true,
+    resetPasswordTokenExpiresIn: Number(process.env.PASSWORD_RESET_EXPIRES_IN_SECONDS ?? 3_600),
+    sendResetPassword: async ({ user, url, token }) => {
+      const resetUrl = new URL(url);
+      resetUrl.searchParams.set("callbackURL", "/reset-password");
+      await sendAccountEmail({
+        to: user.email,
+        kind: "password-reset",
+        subject: "Reset your CwFitness password",
+        url: resetUrl.toString(),
+        token,
+      });
+    },
+  },
+  emailVerification: {
+    sendOnSignUp: true,
+    autoSignInAfterVerification: true,
+    expiresIn: Number(process.env.EMAIL_VERIFICATION_EXPIRES_IN_SECONDS ?? 3_600),
+    sendVerificationEmail: async ({ user, url, token }) => {
+      const verificationUrl = new URL(url);
+      verificationUrl.searchParams.set("callbackURL", "/verify-email/result");
+      await sendAccountEmail({
+        to: user.email,
+        kind: "verification",
+        subject: "Verify your CwFitness email",
+        url: verificationUrl.toString(),
+        token,
+      });
+    },
+  },
   trustedOrigins,
 });
+
+export async function getVerifiedSession(request: Request) {
+  const session = await auth.api.getSession({
+    headers: request.headers,
+    query: { disableCookieCache: true },
+  });
+  return session?.user.emailVerified ? session : null;
+}
