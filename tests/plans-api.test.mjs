@@ -481,10 +481,11 @@ test('User starts one snapshotted Workout Session and completes its timed lifecy
   assert.equal(completedSession.exercises[0].setResults.filter((result) => result.skipped).length, 4);
   const history = await request('/api/workout-sessions', { headers: { cookie } });
   assert.equal(history.status, 200);
-  const [historySession] = (await history.json()).workoutSessions;
+  let [historySession] = (await history.json()).workoutSessions;
   assert.equal(historySession.id, session.id);
   assert.equal(historySession.workoutPlanName, 'Session Plan');
   assert.equal(historySession.workoutDayName, 'Strength Day');
+  assert.equal(historySession.modifiedAt, null);
   assert.deepEqual(historySession.exerciseResults, [{
     sessionExerciseId: session.exercises[0].id,
     exerciseId: exercise.id,
@@ -509,12 +510,106 @@ test('User starts one snapshotted Workout Session and completes its timed lifecy
     }],
     progressionSuggestion: false,
   }]);
+
+  const renamed = await request(`/api/exercises/${exercise.id}`, {
+    method: 'PATCH', headers: { cookie }, body: JSON.stringify({ name: 'Competition Back Squat', version: exercise.version }),
+  });
+  assert.equal(renamed.status, 200);
+  const renamedHistory = await request('/api/workout-sessions', { headers: { cookie } });
+  [historySession] = (await renamedHistory.json()).workoutSessions;
+  assert.equal(historySession.exercises[0].exerciseName, 'Competition Back Squat');
+  assert.deepEqual({
+    exerciseId: historySession.exercises[0].exerciseId,
+    setCount: historySession.exercises[0].setCount,
+    targetValue: historySession.exercises[0].targetValue,
+    weightGrams: historySession.exercises[0].weightGrams,
+  }, { exerciseId: exercise.id, setCount: 4, targetValue: 6, weightGrams: 100_000 });
+  assert.equal(historySession.workoutPlanName, 'Session Plan');
+
+  const forbiddenCorrection = await request(`/api/workout-sessions/${session.id}/exercises/${session.exercises[0].id}/sets/1`, {
+    method: 'PUT', headers: { cookie: otherCookie }, body: JSON.stringify({ actualValue: 8, actualWeight: 110, weightUnit: 'kg', version: historySession.version }),
+  });
+  assert.equal(forbiddenCorrection.status, 404);
+  const completedAdd = await request(`/api/workout-sessions/${session.id}/exercises`, {
+    method: 'POST', headers: { cookie }, body: JSON.stringify({ exerciseId: exercise.id, setCount: 1, targetValue: 6, weight: 100, weightUnit: 'kg', version: historySession.version }),
+  });
+  assert.equal(completedAdd.status, 409);
+  const completedRemove = await request(`/api/workout-sessions/${session.id}/exercises/${session.exercises[0].id}`, {
+    method: 'DELETE', headers: { cookie }, body: JSON.stringify({ version: historySession.version }),
+  });
+  assert.equal(completedRemove.status, 404);
+
   const correction = await request(`/api/workout-sessions/${session.id}/exercises/${session.exercises[0].id}/sets/1`, {
-    method: 'PUT', headers: { cookie }, body: JSON.stringify({ actualValue: 6, actualWeight: 100, weightUnit: 'kg', version: completedSession.version }),
+    method: 'PUT', headers: { cookie }, body: JSON.stringify({ actualValue: 8, actualWeight: 110, weightUnit: 'kg', version: historySession.version }),
   });
   assert.equal(correction.status, 200);
   const correctedHistory = await request('/api/workout-sessions', { headers: { cookie } });
-  assert.equal((await correctedHistory.json()).workoutSessions[0].exerciseResults[0].achievementRate, 25);
+  [historySession] = (await correctedHistory.json()).workoutSessions;
+  assert.equal(typeof historySession.modifiedAt, 'string');
+  assert.equal(historySession.version, completedSession.version + 1);
+  assert.deepEqual(historySession.exerciseResults[0], {
+    sessionExerciseId: session.exercises[0].id,
+    exerciseId: exercise.id,
+    exerciseName: 'Competition Back Squat',
+    achievementRate: 25,
+    excessTargetValue: 2,
+    excessWeightGrams: 10_000,
+  });
+  const correctedProgress = await request(`/api/plans/${plan.id}/progress`, { headers: { cookie } });
+  assert.deepEqual((await correctedProgress.json()).progress[0].recent[0], {
+    date: session.localStartDate,
+    sessionExerciseId: session.exercises[0].id,
+    exerciseId: exercise.id,
+    exerciseName: 'Competition Back Squat',
+    achievementRate: 25,
+    excessTargetValue: 2,
+    excessWeightGrams: 10_000,
+  });
+
+  const skipCorrection = await request(`/api/workout-sessions/${session.id}/exercises/${session.exercises[0].id}/sets/1`, {
+    method: 'PUT', headers: { cookie }, body: JSON.stringify({ skipped: true, version: historySession.version }),
+  });
+  assert.equal(skipCorrection.status, 200);
+  const skippedHistory = await request('/api/workout-sessions', { headers: { cookie } });
+  [historySession] = (await skippedHistory.json()).workoutSessions;
+  assert.equal(historySession.exercises[0].setResults.find((result) => result.setIndex === 1).skipped, true);
+  assert.equal(historySession.exerciseResults[0].achievementRate, 0);
+
+  const restoreCorrection = await request(`/api/workout-sessions/${session.id}/exercises/${session.exercises[0].id}/sets/1`, {
+    method: 'PUT', headers: { cookie }, body: JSON.stringify({ actualValue: 8, actualWeight: 110, weightUnit: 'kg', version: historySession.version }),
+  });
+  assert.equal(restoreCorrection.status, 200);
+  const restoredHistory = await request('/api/workout-sessions', { headers: { cookie } });
+  [historySession] = (await restoredHistory.json()).workoutSessions;
+
+  const unconfirmedDelete = await request(`/api/workout-sessions/${session.id}`, {
+    method: 'DELETE', headers: { cookie }, body: JSON.stringify({ version: historySession.version }),
+  });
+  assert.equal(unconfirmedDelete.status, 400);
+  const forbiddenDelete = await request(`/api/workout-sessions/${session.id}`, {
+    method: 'DELETE', headers: { cookie: otherCookie }, body: JSON.stringify({ confirmation: 'DELETE', version: historySession.version }),
+  });
+  assert.equal(forbiddenDelete.status, 404);
+  const deleted = await request(`/api/workout-sessions/${session.id}`, {
+    method: 'DELETE', headers: { cookie }, body: JSON.stringify({ confirmation: 'DELETE', version: historySession.version }),
+  });
+  assert.equal(deleted.status, 204);
+
+  const afterDeleteHistory = await request('/api/workout-sessions', { headers: { cookie } });
+  assert.deepEqual((await afterDeleteHistory.json()).workoutSessions, []);
+  const afterDeleteProgress = await request(`/api/plans/${plan.id}/progress`, { headers: { cookie } });
+  assert.deepEqual((await afterDeleteProgress.json()).progress, []);
+  assert.equal((await getPlan(cookie, plan.id)).id, plan.id);
+  const remainingExercises = await request('/api/exercises', { headers: { cookie } });
+  assert.equal((await remainingExercises.json()).exercises.find((item) => item.id === exercise.id).name, 'Competition Back Squat');
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    const remainingSetResults = await client.query('SELECT count(*)::int AS count FROM "session_set_result" WHERE "sessionExerciseId" = $1', [session.exercises[0].id]);
+    assert.equal(remainingSetResults.rows[0].count, 0);
+  } finally {
+    await client.end();
+  }
   assert.equal((await (await request('/api/workout-sessions/active', { headers: { cookie } })).json()).workoutSession, null);
 });
 

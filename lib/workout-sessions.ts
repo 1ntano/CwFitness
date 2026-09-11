@@ -8,6 +8,7 @@ export const workoutSessionSelect = {
   startedAt: true,
   pausedAt: true,
   completedAt: true,
+  modifiedAt: true,
   trainingTimeSeconds: true,
   lastHeartbeatAt: true,
   version: true,

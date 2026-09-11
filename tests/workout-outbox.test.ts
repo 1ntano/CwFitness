@@ -21,6 +21,7 @@ function sessionFixture(): WorkoutSession {
     startedAt: "2026-09-10T12:00:00.000Z",
     pausedAt: null,
     completedAt: null,
+    modifiedAt: null,
     trainingTimeSeconds: null,
     version: 1,
     editingDeviceId: "device-1",

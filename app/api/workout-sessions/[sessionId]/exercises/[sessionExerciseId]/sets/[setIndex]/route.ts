@@ -53,7 +53,9 @@ export async function PUT(request: Request, context: { params: Promise<{ session
           ? { status: "ACTIVE", editingDeviceId: session.session.id }
           : { status: "COMPLETED" }),
       },
-      data: { updatedAt: new Date() },
+      data: exercise.workoutSession.status === "COMPLETED"
+        ? { modifiedAt: new Date(), version: { increment: 1 } }
+        : { updatedAt: new Date() },
     });
     if (lease.count === 0) return null;
     return tx.sessionSetResult.upsert({

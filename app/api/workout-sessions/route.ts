@@ -25,7 +25,7 @@ export async function GET(request: Request) {
   });
   return Response.json({ workoutSessions: workoutSessions.map(({ exercises, ...workoutSession }) => ({
     ...workoutSession,
-    exercises,
+    exercises: exercises.map(({ exercise, ...sessionExercise }) => ({ ...sessionExercise, exerciseName: exercise.name })),
     exerciseResults: scoreExercises(exercises),
   })) });
 }

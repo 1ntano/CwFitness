@@ -530,6 +530,15 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
     );
   }
 
+  async function deleteHistoricalSession(session: WorkoutHistorySession) {
+    if (!window.confirm(`永久删除“${session.workoutDayName}”这场完成训练？所有记录与进展贡献都会移除。`)) return;
+    if (!window.confirm("再次确认：此操作不可恢复。")) return;
+    await runMutation(
+      () => apiRequest(`/api/workout-sessions/${session.id}`, { method: "DELETE", body: JSON.stringify({ confirmation: "DELETE", version: session.version }) }),
+      "完成训练已永久删除。",
+    );
+  }
+
   async function takeOverSession() {
     if (!session) return;
     const result = await runMutation(
@@ -662,7 +671,7 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
                 />
               )}
 
-              {view === "history" && <WorkoutHistory workoutSessions={workoutSessions} busy={busy} weightUnit={settings.weightUnit} onCorrectSet={correctHistoricalSet} />}
+              {view === "history" && <WorkoutHistory workoutSessions={workoutSessions} busy={busy} weightUnit={settings.weightUnit} onCorrectSet={correctHistoricalSet} onDeleteSession={deleteHistoricalSession} />}
               {view === "settings" && <SettingsPanel settings={settings} busy={busy} onSave={saveSettings} onDelete={deleteAccount} />}
 
               {view === "training" && session && (

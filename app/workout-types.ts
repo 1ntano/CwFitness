@@ -65,6 +65,7 @@ export type WorkoutSession = {
   startedAt: string;
   pausedAt: string | null;
   completedAt: string | null;
+  modifiedAt: string | null;
   trainingTimeSeconds: number | null;
   version: number;
   editingDeviceId: string | null;

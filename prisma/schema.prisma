@@ -177,6 +177,7 @@ model WorkoutSession {
   pausedDurationMs    Int                  @default(0)
   activeDurationMs    Int                  @default(0)
   completedAt         DateTime?
+  modifiedAt          DateTime?
   trainingTimeSeconds Int?
   lastHeartbeatAt     DateTime?
   version             Int                  @default(1)
