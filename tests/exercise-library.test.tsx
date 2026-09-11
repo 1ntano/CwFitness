@@ -19,6 +19,7 @@ describe("ExerciseLibrary", () => {
         onSavePlan={vi.fn().mockResolvedValue(undefined)}
         onUpdate={vi.fn().mockResolvedValue(undefined)}
         onDelete={vi.fn().mockResolvedValue(undefined)}
+        onDeleteAll={vi.fn().mockResolvedValue(undefined)}
       />,
     );
 
@@ -50,10 +51,42 @@ describe("ExerciseLibrary", () => {
         onSavePlan={vi.fn().mockResolvedValue(undefined)}
         onUpdate={vi.fn().mockResolvedValue(undefined)}
         onDelete={vi.fn().mockResolvedValue(undefined)}
+        onDeleteAll={vi.fn().mockResolvedValue(undefined)}
       />,
     );
 
     await user.click(screen.getAllByRole("button", { name: "添加" })[0]);
     expect(onCreatePresets).toHaveBeenCalledWith(["杠铃卧推"]);
+  });
+
+  it("calls onDeleteAll from the clear-all action", async () => {
+    const user = userEvent.setup();
+    const onDeleteAll = vi.fn().mockResolvedValue(undefined);
+
+    render(
+      <ExerciseLibrary
+        exercises={[{
+          id: "exercise-1",
+          name: "杠铃卧推",
+          resistanceType: "WEIGHTED",
+          targetType: "REPETITIONS",
+          muscleGroup: "CHEST",
+          defaultTargetValue: 8,
+          defaultWeightGrams: 40000,
+          version: 1,
+        }]}
+        busy={false}
+        weightUnit="kg"
+        onCreate={vi.fn().mockResolvedValue(undefined)}
+        onCreatePresets={vi.fn().mockResolvedValue(undefined)}
+        onSavePlan={vi.fn().mockResolvedValue(undefined)}
+        onUpdate={vi.fn().mockResolvedValue(undefined)}
+        onDelete={vi.fn().mockResolvedValue(undefined)}
+        onDeleteAll={onDeleteAll}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "全部删除" }));
+    expect(onDeleteAll).toHaveBeenCalledOnce();
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { ExerciseLibrary, type NewExerciseInput } from "./exercise-library";
 import { SavedPlanView } from "./saved-plan-view";
 import type { PlannedExerciseInput } from "./plan-editor";
@@ -61,6 +61,23 @@ function errorText(error: unknown) {
   return error instanceof Error ? error.message : "操作没有完成，请稍后重试。";
 }
 
+function subscribeToOnlineStatus(onChange: () => void) {
+  window.addEventListener("online", onChange);
+  window.addEventListener("offline", onChange);
+  return () => {
+    window.removeEventListener("online", onChange);
+    window.removeEventListener("offline", onChange);
+  };
+}
+
+function getOnlineSnapshot() {
+  return navigator.onLine;
+}
+
+function getServerOnlineSnapshot() {
+  return true;
+}
+
 export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }: WorkoutWorkspaceProps) {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -77,6 +94,8 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
   const [offline, setOffline] = useState(false);
   const [pendingSync, setPendingSync] = useState(0);
   const [syncError, setSyncError] = useState("");
+  const isOnline = useSyncExternalStore(subscribeToOnlineStatus, getOnlineSnapshot, getServerOnlineSnapshot);
+  const connectionOffline = offline || !isOnline;
 
   const restoreDraft = useCallback(async () => {
     const draft = await loadWorkoutSessionDraft(user.id);
@@ -389,6 +408,21 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
     }
   }
 
+  async function deleteAllExercises() {
+    if (exercises.length === 0) return;
+    const confirmed = window.confirm(
+      `永久删除全部 ${exercises.length} 个动作？\n相关训练计划中的动作目标和历史动作记录也会一并删除。此操作不可恢复。`,
+    );
+    if (!confirmed) return;
+    await runMutation(
+      () => apiRequest("/api/exercises", {
+        method: "DELETE",
+        body: JSON.stringify({ confirmation: "DELETE_ALL" }),
+      }),
+      "全部动作及其相关记录已删除。",
+    );
+  }
+
   async function startWorkout(day: WorkoutDay) {
     setBusy(true);
     setNotice("");
@@ -611,7 +645,17 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
             {session && <button type="button" aria-current={view === "training" ? "page" : undefined} onClick={() => setView("training")}>训练</button>}
           </nav>
           <div className="workspace-account">
-            <span>{user.name}</span>
+            <span className="workspace-account-name">{user.name}</span>
+            <span
+              className={`online-status${connectionOffline ? " is-offline" : ""}`}
+              role="status"
+              aria-live="polite"
+              aria-label={connectionOffline ? "当前处于离线状态" : "当前处于在线状态"}
+              title={connectionOffline ? "当前处于离线状态" : "当前处于在线状态"}
+            >
+              <span className="online-status-dot" aria-hidden="true" />
+              {connectionOffline ? "离线" : "在线"}
+            </span>
             <button className="action-button quiet" type="button" disabled={busy} onClick={onSignOut}>退出</button>
           </div>
         </header>
@@ -702,6 +746,7 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
                   onSavePlan={saveExercisesToPlan}
                   onUpdate={updateExercise}
                   onDelete={deleteExercise}
+                  onDeleteAll={deleteAllExercises}
                 />
               )}
 

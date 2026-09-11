@@ -22,6 +22,7 @@ type ExerciseLibraryProps = {
   onSavePlan: () => Promise<void>;
   onUpdate: (exercise: Exercise, name: string, defaultTargetValue: number, defaultWeightGrams: number | null) => Promise<void>;
   onDelete: (exercise: Exercise) => Promise<void>;
+  onDeleteAll: () => Promise<void>;
 };
 
 function typeLabel(exercise: Pick<Exercise, "resistanceType" | "targetType">) {
@@ -41,7 +42,7 @@ function prescriptionLabel(exercise: Exercise, weightUnit: "kg" | "lb") {
   return `${target} · ${weight}`;
 }
 
-export function ExerciseLibrary({ exercises, busy, weightUnit, onCreate, onCreatePresets, onSavePlan, onUpdate, onDelete }: ExerciseLibraryProps) {
+export function ExerciseLibrary({ exercises, busy, weightUnit, onCreate, onCreatePresets, onSavePlan, onUpdate, onDelete, onDeleteAll }: ExerciseLibraryProps) {
   const [presetPageIndex, setPresetPageIndex] = useState(0);
   const existingNames = new Set(exercises.map((exercise) => exercise.name));
   const missingPresetNames = EXERCISE_PRESETS
@@ -271,6 +272,14 @@ export function ExerciseLibrary({ exercises, busy, weightUnit, onCreate, onCreat
       </section>
 
       <div className="exercise-save-row">
+        <button
+          className="action-button danger delete-all-button"
+          type="button"
+          disabled={busy || exercises.length === 0}
+          onClick={onDeleteAll}
+        >
+          全部删除
+        </button>
         <button
           className="action-button primary save-plan-button"
           type="button"

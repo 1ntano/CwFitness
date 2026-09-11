@@ -58,3 +58,25 @@ export async function POST(request: Request) {
   });
   return Response.json({ exercise }, { status: 201 });
 }
+
+export async function DELETE(request: Request) {
+  const session = await getVerifiedSession(request);
+  if (!session) return Response.json({ error: "Unauthorized" }, { status: 401 });
+
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  if (body?.confirmation !== "DELETE_ALL") {
+    return Response.json({ error: "删除确认无效。" }, { status: 400 });
+  }
+
+  const inProgress = await prisma.sessionExercise.findFirst({
+    where: {
+      exercise: { userId: session.user.id },
+      workoutSession: { userId: session.user.id, status: { in: ["ACTIVE", "PAUSED"] } },
+    },
+    select: { id: true },
+  });
+  if (inProgress) return Response.json({ error: "训练进行中，不能删除全部动作。" }, { status: 409 });
+
+  const deleted = await prisma.exercise.deleteMany({ where: { userId: session.user.id } });
+  return Response.json({ deleted: deleted.count });
+}
