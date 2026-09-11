@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { MUSCLE_GROUP_LABELS } from "../lib/exercise-taxonomy";
 import { weightFromGrams } from "../lib/weights";
 import type { Plan, PlannedExercise, WorkoutDay } from "./workout-types";
@@ -11,6 +12,7 @@ type SavedPlanViewProps = {
   weightUnit: "kg" | "lb";
   onStartWorkout: (day: WorkoutDay) => Promise<void>;
   onDeletePlan: (plan: Plan) => Promise<void>;
+  onSetArchived: (plan: Plan, archived: boolean) => Promise<void>;
   onUpdateDay: (plan: Plan, day: WorkoutDay, name: string, suggestedWeekday: number | null) => Promise<void>;
   onUpdateExercise: (
     plan: Plan,
@@ -32,8 +34,10 @@ function prescriptionLabel(targetValue: number, targetType: "REPETITIONS" | "DUR
   return weightGrams === null ? target : `${target} · ${weightFromGrams(weightGrams, weightUnit).toFixed(1)} ${weightUnit}`;
 }
 
-export function SavedPlanView({ plans, selectedPlanId, busy, weightUnit, onStartWorkout, onDeletePlan, onUpdateDay, onUpdateExercise }: SavedPlanViewProps) {
-  const visiblePlans = plans.filter((plan) => plan.archivedAt === null);
+export function SavedPlanView({ plans, selectedPlanId, busy, weightUnit, onStartWorkout, onDeletePlan, onSetArchived, onUpdateDay, onUpdateExercise }: SavedPlanViewProps) {
+  const [showArchived, setShowArchived] = useState(true);
+  const archivedPlanCount = plans.filter((plan) => plan.archivedAt !== null).length;
+  const visiblePlans = showArchived ? plans : plans.filter((plan) => plan.archivedAt === null);
 
   return (
     <section className="workspace-section saved-plan-page" aria-labelledby="saved-plan-title">
@@ -45,21 +49,43 @@ export function SavedPlanView({ plans, selectedPlanId, busy, weightUnit, onStart
         <p>这里展示从动作页面保存的动作、默认次数、重量和训练目标。</p>
       </header>
 
+      {archivedPlanCount > 0 && (
+        <div className="saved-plan-toolbar">
+          <span>{showArchived ? `当前显示 ${archivedPlanCount} 个归档计划` : `已隐藏 ${archivedPlanCount} 个归档计划`}</span>
+          <button className="action-button quiet" type="button" aria-expanded={showArchived} onClick={() => setShowArchived((visible) => !visible)}>
+            {showArchived ? "隐藏归档计划" : "显示归档计划"}
+          </button>
+        </div>
+      )}
+
       {visiblePlans.length === 0 ? (
         <div className="saved-plan-empty">
-          <p>还没有保存的训练计划。</p>
-          <span>进入“动作”页面，添加动作后点击“保存计划”。</span>
+          {archivedPlanCount > 0 ? (
+            <>
+              <p>归档计划已隐藏。</p>
+              <span>点击上方“显示归档计划”即可查看。</span>
+            </>
+          ) : (
+            <>
+              <p>还没有保存的训练计划。</p>
+              <span>进入“动作”页面，添加动作后点击“保存计划”。</span>
+            </>
+          )}
         </div>
       ) : (
         <div className="saved-plan-list">
           {visiblePlans.map((plan) => (
-            <article className={`saved-plan-card${plan.id === selectedPlanId ? " is-selected" : ""}`} key={plan.id}>
+            <article className={`saved-plan-card${plan.id === selectedPlanId ? " is-selected" : ""}${plan.archivedAt !== null ? " is-archived" : ""}`} key={plan.id}>
               <header className="saved-plan-header">
                 <div>
                   <p className="section-kicker saved-plan-kicker">训练计划</p>
+                  {plan.archivedAt !== null && <span className="saved-plan-status">已归档</span>}
                 </div>
                 <div className="saved-plan-actions">
                   <span>{plan.workoutDays.length} 个训练日</span>
+                  <button className="action-button quiet" type="button" disabled={busy} onClick={() => onSetArchived(plan, plan.archivedAt === null)}>
+                    {plan.archivedAt === null ? "归档计划" : "恢复计划"}
+                  </button>
                   <button className="action-button danger" type="button" disabled={busy} onClick={() => onDeletePlan(plan)}>
                     删除计划
                   </button>
@@ -96,10 +122,10 @@ export function SavedPlanView({ plans, selectedPlanId, busy, weightUnit, onStart
                     <button
                       className="action-button primary"
                       type="button"
-                      disabled={busy || day.plannedExercises.length === 0}
+                      disabled={busy || day.plannedExercises.length === 0 || plan.archivedAt !== null}
                       onClick={() => onStartWorkout(day)}
                     >
-                      开始训练
+                      {plan.archivedAt === null ? "开始训练" : "计划已归档"}
                     </button>
                   </header>
 

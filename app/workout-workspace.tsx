@@ -621,10 +621,12 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
   }
 
   const allDays = plans.flatMap((plan) => plan.workoutDays.map((day) => ({ plan, day })));
-  const suggested = allDays.find(({ day }) => day.suggestedWeekday === new Date().getDay())
+  const suggested = allDays.find(({ day }) => day.suggestedWeekday === new Date().getDay() && day.plannedExercises.length > 0)
     ?? allDays.find(({ day }) => day.plannedExercises.length > 0)
-    ?? allDays[0]
     ?? null;
+  const suggestedSetCount = suggested?.day.plannedExercises.reduce((total, planned) => total + planned.setCount, 0) ?? 0;
+  const setupView: WorkspaceView = "exercises";
+  const setupLabel = exercises.length === 0 ? "添加动作" : "安排训练";
   const canEditSession = session?.editingDeviceId === deviceId;
 
   return (
@@ -679,45 +681,72 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
           {loading ? <p className="loading-state">正在加载训练空间…</p> : (
             <>
               {view === "today" && (
-                <section className="workspace-section" aria-labelledby="today-title">
-                  <header className="section-heading">
-                    <div>
-                      <p className="section-kicker">今日训练</p>
-                      <h1 id="today-title">{session ? "有一场训练正在进行。" : "从建议训练日开始。"}</h1>
+                <section className="workspace-section simple-home" aria-labelledby="today-title">
+                  <div className="simple-home-card">
+                    <div className="simple-home-header">
+                      <div>
+                        <h1 id="today-title">{session ? "训练进行中" : suggested ? "准备开始训练" : "先建立训练计划"}</h1>
+                        <p>{session
+                          ? `${session.exercises.filter((exercise) => exercise.removedAt === null).length} 个动作等待完成`
+                          : suggested
+                            ? `${suggested.plan.name} · ${suggested.day.name}`
+                            : "添加动作并安排训练日，开始记录你的训练。"}</p>
+                      </div>
+                      {session && (
+                        <span className="simple-home-status is-live">
+                          {session.status === "PAUSED" ? "已挂起" : "进行中"}
+                        </span>
+                      )}
                     </div>
-                    <p>{session ? "目标已经锁定，可以继续记录。" : "保存动作后即可开始建议的训练日。"}</p>
-                  </header>
 
-                  <div className="today-layout">
-                    <article className="today-primary">
+                    {suggested && !session && (
+                      <div className="simple-home-plan">
+                        <strong>{suggested.day.name}</strong>
+                        <span>{suggested.day.plannedExercises.length} 个动作 · {suggestedSetCount} 组</span>
+                      </div>
+                    )}
+
+                    <div className="simple-home-actions">
                       {session ? (
                         <>
-                          <p className="section-kicker">{session.status === "PAUSED" ? "已挂起" : "进行中"}</p>
-                          <h2>{session.exercises.filter((exercise) => exercise.removedAt === null).length} 个动作等待记录</h2>
-                          <p>{session.localStartDate} 开始 · {session.status === "PAUSED" ? "训练时间已冻结" : "训练时间正在累计"}</p>
-                          <button className="action-button primary large" type="button" onClick={() => setView("training")}>继续进入训练</button>
+                          <button className="action-button primary large" type="button" onClick={() => setView("training")}>继续训练</button>
+                          <button className="action-button" type="button" onClick={() => setView("history")}>训练历史</button>
                         </>
                       ) : suggested ? (
                         <>
-                          <p className="section-kicker">{suggested.plan.name}</p>
-                          <h2>{suggested.day.name}</h2>
-                          <p>{suggested.day.plannedExercises.length > 0 ? `${suggested.day.plannedExercises.length} 个动作已安排` : "先为这个训练日添加动作"}</p>
-                          <button className="action-button primary large" type="button" disabled={busy || suggested.day.plannedExercises.length === 0} onClick={() => startWorkout(suggested.day)}>开始训练</button>
+                          <button className="action-button primary large" type="button" disabled={busy} onClick={() => startWorkout(suggested.day)}>开始训练</button>
+                          <button className="action-button" type="button" onClick={() => setView("plans")}>查看计划</button>
                         </>
                       ) : (
                         <>
-                          <p className="section-kicker">准备开始</p>
-                          <h2>先建立动作与训练计划。</h2>
-                          <p>动作定义记录方式，训练日负责安排组数和目标。</p>
-                          <button className="action-button primary large" type="button" onClick={() => setView("exercises")}>创建第一个动作</button>
+                          <button className="action-button primary large" type="button" onClick={() => setView(setupView)}>{setupLabel}</button>
+                          <button className="action-button" type="button" onClick={() => setView("plans")}>查看计划</button>
                         </>
                       )}
-                    </article>
-                    <div className="today-stats">
-                      <div><span>训练计划</span><strong>{plans.length}</strong></div>
-                      <div><span>动作</span><strong>{exercises.length}</strong></div>
-                      <div><span>训练日</span><strong>{allDays.length}</strong></div>
                     </div>
+                  </div>
+
+                  <div className="simple-home-shortcuts" aria-label="首页快捷功能">
+                    <button className="simple-home-shortcut" type="button" disabled={offline} onClick={() => setView("plans")}>
+                      <strong>训练计划</strong>
+                      <span>{plans.length} 个计划</span>
+                      <small>安排训练日 →</small>
+                    </button>
+                    <button className="simple-home-shortcut" type="button" disabled={offline} onClick={() => setView("exercises")}>
+                      <strong>动作库</strong>
+                      <span>{exercises.length} 个动作</span>
+                      <small>管理动作 →</small>
+                    </button>
+                    <button className="simple-home-shortcut" type="button" disabled={offline} onClick={() => setView("history")}>
+                      <strong>训练历史</strong>
+                      <span>{workoutSessions.length} 场完成</span>
+                      <small>查看记录 →</small>
+                    </button>
+                    <button className="simple-home-shortcut" type="button" disabled={offline} onClick={() => setView("tools")}>
+                      <strong>训练工具</strong>
+                      <span>演示与计算</span>
+                      <small>打开工具 →</small>
+                    </button>
                   </div>
                 </section>
               )}
@@ -731,6 +760,7 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
                   weightUnit={settings.weightUnit}
                   onStartWorkout={startWorkout}
                   onDeletePlan={deleteSavedPlan}
+                  onSetArchived={setPlanArchived}
                   onUpdateDay={updateDay}
                   onUpdateExercise={updatePlannedExercise}
                 />
