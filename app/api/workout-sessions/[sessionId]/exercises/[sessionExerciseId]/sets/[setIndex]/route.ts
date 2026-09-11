@@ -59,7 +59,7 @@ export async function PUT(request: Request, context: { params: Promise<{ session
     return tx.sessionSetResult.upsert({
       where: { sessionExerciseId_setIndex: { sessionExerciseId, setIndex } },
       create: { sessionExerciseId, setIndex, actualValue, actualWeightGrams, skipped, operationId },
-      update: { actualValue, actualWeightGrams, skipped },
+      update: { actualValue, actualWeightGrams, skipped, operationId },
       select: { setIndex: true, actualValue: true, actualWeightGrams: true, skipped: true },
     });
   });

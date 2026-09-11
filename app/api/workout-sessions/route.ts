@@ -66,7 +66,7 @@ export async function POST(request: Request) {
         startedAt: now,
         lastHeartbeatAt: now,
         editingDeviceId: session.session.id,
-        exercises: { create: day.plannedExercises.map((planned) => ({
+        exercises: { create: day.plannedExercises.map((planned, position) => ({
           exerciseId: planned.exerciseId,
           exerciseName: planned.exercise.name,
           resistanceType: planned.exercise.resistanceType,
@@ -74,6 +74,7 @@ export async function POST(request: Request) {
           setCount: planned.setCount,
           targetValue: planned.targetValue,
           weightGrams: planned.weightGrams,
+          position,
         })) },
       },
       select: workoutSessionSelect,

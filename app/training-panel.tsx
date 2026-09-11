@@ -22,6 +22,7 @@ type TrainingPanelProps = {
   busy: boolean;
   weightUnit: "kg" | "lb";
   canEdit: boolean;
+  offline: boolean;
   onRecordSet: (exercise: SessionExercise, setIndex: number, input: SetInput | null) => Promise<void>;
   onAddExercise: (input: AddedExerciseInput) => Promise<void>;
   onRemoveExercise: (exercise: SessionExercise) => Promise<void>;
@@ -30,6 +31,7 @@ type TrainingPanelProps = {
   onComplete: () => Promise<void>;
   onAbandon: () => Promise<void>;
   onTakeover: () => Promise<void>;
+  onReorder: (exerciseIds: string[]) => Promise<void>;
 };
 
 function targetText(exercise: SessionExercise, weightUnit: "kg" | "lb") {
@@ -48,7 +50,7 @@ function resultText(exercise: SessionExercise, result: SetResult | undefined, we
   return metric + weight;
 }
 
-export function TrainingPanel({ session, exercises: availableExercises, busy, weightUnit, canEdit, onRecordSet, onAddExercise, onRemoveExercise, onPause, onResume, onComplete, onAbandon, onTakeover }: TrainingPanelProps) {
+export function TrainingPanel({ session, exercises: availableExercises, busy, weightUnit, canEdit, offline, onRecordSet, onAddExercise, onRemoveExercise, onPause, onResume, onComplete, onAbandon, onTakeover, onReorder }: TrainingPanelProps) {
   const exercises = session.exercises.filter((exercise) => exercise.removedAt === null);
   const plannedSetCount = exercises.reduce((total, exercise) => total + exercise.setCount, 0);
   const recordedSetCount = exercises.reduce((total, exercise) => total + exercise.setResults.length, 0);
@@ -58,9 +60,17 @@ export function TrainingPanel({ session, exercises: availableExercises, busy, we
   const selectedExercise = availableExercises.find((exercise) => exercise.id === selectedExerciseId);
 
   function completeSession() {
-    if (readOnly) return;
+    if (readOnly || offline) return;
     if (recordedSetCount < plannedSetCount && !window.confirm("还有未记录的目标组。完成后它们会按未完成计算，确定结束训练吗？")) return;
     void onComplete();
+  }
+
+  function moveExercise(index: number, direction: -1 | 1) {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= exercises.length) return;
+    const ids = exercises.map((exercise) => exercise.id);
+    [ids[index], ids[targetIndex]] = [ids[targetIndex], ids[index]];
+    void onReorder(ids);
   }
 
   return (
@@ -72,15 +82,16 @@ export function TrainingPanel({ session, exercises: availableExercises, busy, we
         </div>
         <div className="session-actions">
           {readOnly && <button className="action-button primary" type="button" disabled={busy} onClick={onTakeover}>在此设备接管</button>}
-          <button className="action-button" type="button" disabled={busy || readOnly} onClick={isPaused ? onResume : onPause}>
+          <button className="action-button" type="button" disabled={busy || readOnly || offline} onClick={isPaused ? onResume : onPause}>
             {isPaused ? "继续训练" : "挂起"}
           </button>
-          <button className="action-button primary" type="button" disabled={busy || readOnly} onClick={completeSession}>结束训练</button>
-          <button className="action-button quiet danger" type="button" disabled={busy || readOnly} onClick={() => { if (window.confirm("放弃本次训练？已记录内容会保留，但不计入进展。")) void onAbandon(); }}>放弃</button>
+          <button className="action-button primary" type="button" disabled={busy || readOnly || offline} onClick={completeSession}>结束训练</button>
+          <button className="action-button quiet danger" type="button" disabled={busy || readOnly || offline} onClick={() => { if (window.confirm("放弃本次训练？已记录内容会保留，但不计入进展。")) void onAbandon(); }}>放弃</button>
         </div>
       </header>
 
       {readOnly && <p className="workspace-notice recovery" role="status">另一台设备正在编辑这场训练。当前页面为只读，可以刷新查看最新状态或在此设备接管。</p>}
+      {offline && <p className="workspace-notice recovery" role="status">当前处于离线状态。训练记录会保存在本机，联网后自动同步。</p>}
 
       <div className="session-summary" data-testid="active-session">
         <div><span>完成组数</span><strong>{recordedSetCount} / {plannedSetCount}</strong></div>
@@ -112,7 +123,7 @@ export function TrainingPanel({ session, exercises: availableExercises, busy, we
       </form>
 
       <div className="training-list">
-        {exercises.map((exercise) => {
+        {exercises.map((exercise, exerciseIndex) => {
           const results = new Map(exercise.setResults.map((result) => [result.setIndex, result]));
           return (
             <article className="training-exercise" key={exercise.id}>
@@ -123,6 +134,8 @@ export function TrainingPanel({ session, exercises: availableExercises, busy, we
                 </div>
                 <div className="training-exercise-actions">
                   {exercise.source === "ADDED" && <span className="tag">训练中追加</span>}
+                  <button className="icon-button" type="button" aria-label={`上移${exercise.exerciseName}`} disabled={busy || isPaused || readOnly || exerciseIndex === 0} onClick={() => moveExercise(exerciseIndex, -1)}>↑</button>
+                  <button className="icon-button" type="button" aria-label={`下移${exercise.exerciseName}`} disabled={busy || isPaused || readOnly || exerciseIndex === exercises.length - 1} onClick={() => moveExercise(exerciseIndex, 1)}>↓</button>
                   <button className="action-button compact quiet danger" type="button" disabled={busy || isPaused || readOnly} onClick={() => onRemoveExercise(exercise)}>移除动作</button>
                 </div>
               </header>

@@ -9,6 +9,11 @@ export async function DELETE(request: Request, context: { params: Promise<{ sess
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const version = requestedVersion(body?.version);
   if (!version) return Response.json({ error: "Version is required" }, { status: 400 });
+  const existing = await prisma.sessionExercise.findFirst({
+    where: { id: sessionExerciseId, workoutSessionId: sessionId, workoutSession: { userId: session.user.id } },
+    select: { removedAt: true },
+  });
+  if (existing?.removedAt) return new Response(null, { status: 204 });
   const workoutSession = await prisma.workoutSession.findFirst({
     where: { id: sessionId, userId: session.user.id, status: "ACTIVE" },
     select: { id: true, version: true, editingDeviceId: true },
@@ -35,7 +40,9 @@ export async function DELETE(request: Request, context: { params: Promise<{ sess
       where: { id: sessionId },
       select: { id: true, status: true, version: true, editingDeviceId: true },
     });
-    return sessionUnavailable(latest, "SESSION_TAKEN_OVER", "Workout Session is being edited on another device");
+    return latest.editingDeviceId !== session.session.id
+      ? sessionUnavailable(latest, "SESSION_TAKEN_OVER", "Workout Session is being edited on another device")
+      : versionConflict(latest, "Workout Session changed on another device");
   }
   if (result.count === 0) return Response.json({ error: "Active Session Exercise not found" }, { status: 404 });
   return new Response(null, { status: 204 });

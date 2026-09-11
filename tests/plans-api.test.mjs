@@ -559,6 +559,19 @@ test('User records sets and receives per-Exercise achievement without removed Ex
   assert.equal(repeatedSet.status, 200);
   assert.deepEqual((await repeatedSet.json()).setResult, { setIndex: 1, actualValue: 12, actualWeightGrams: 110_000, skipped: false });
 
+  const updatedOperationId = `${session.id}-update-deadlift-set-1`;
+  const updatedSet = await request(`/api/workout-sessions/${session.id}/exercises/${sessionExercise.id}/sets/1`, {
+    method: 'PUT', headers: { cookie },
+    body: JSON.stringify({ actualValue: 11, actualWeight: 105, weightUnit: 'kg', operationId: updatedOperationId, version: session.version }),
+  });
+  assert.equal(updatedSet.status, 200);
+  const retriedUpdatedSet = await request(`/api/workout-sessions/${session.id}/exercises/${sessionExercise.id}/sets/1`, {
+    method: 'PUT', headers: { cookie },
+    body: JSON.stringify({ actualValue: 1, actualWeight: 1, weightUnit: 'kg', operationId: updatedOperationId, version: session.version }),
+  });
+  assert.equal(retriedUpdatedSet.status, 200);
+  assert.deepEqual((await retriedUpdatedSet.json()).setResult, { setIndex: 1, actualValue: 11, actualWeightGrams: 105_000, skipped: false });
+
   const partialWeightSet = await request(`/api/workout-sessions/${session.id}/exercises/${underTargetSessionExercise.id}/sets/1`, {
     method: 'PUT', headers: { cookie },
     body: JSON.stringify({ actualValue: 8, actualWeight: 110, weightUnit: 'kg', version: session.version }),
@@ -620,8 +633,8 @@ test('User records sets and receives per-Exercise achievement without removed Ex
     exerciseId: weighted.id,
     exerciseName: 'Deadlift',
     achievementRate: 50,
-    excessTargetValue: 2,
-    excessWeightGrams: 10_000,
+    excessTargetValue: 1,
+    excessWeightGrams: 5_000,
   }, {
     sessionExerciseId: underTargetSessionExercise.id,
     exerciseId: underTarget.id,
@@ -906,6 +919,46 @@ test('A second device can explicitly take over an In-progress Session', async ()
   });
   assert.equal(completed.status, 200);
   assert.equal((await completed.json()).workoutSession.editingDeviceId, null);
+});
+
+test('Session Exercise order can be changed and replayed idempotently', async () => {
+  const cookie = await signUp('SessionOrder');
+  const plan = await createPlan(cookie, 'Order Plan');
+  const day = await createWorkoutDay(cookie, plan.id, 'Order Day');
+  const firstExercise = await createExercise(cookie, {
+    name: 'First Exercise', resistanceType: 'BODYWEIGHT', targetType: 'REPETITIONS',
+  });
+  const secondExercise = await createExercise(cookie, {
+    name: 'Second Exercise', resistanceType: 'BODYWEIGHT', targetType: 'REPETITIONS',
+  });
+  await addPlannedExercise(cookie, plan.id, day.id, {
+    exerciseId: firstExercise.id, setCount: 1, targetValue: 8,
+  });
+  await addPlannedExercise(cookie, plan.id, day.id, {
+    exerciseId: secondExercise.id, setCount: 1, targetValue: 10,
+  });
+  const started = await request('/api/workout-sessions', {
+    method: 'POST', headers: { cookie },
+    body: JSON.stringify({ workoutDayId: day.id, timeZone: 'Asia/Shanghai' }),
+  });
+  const session = (await started.json()).workoutSession;
+  const exerciseIds = session.exercises.map((exercise) => exercise.id).reverse();
+
+  const reordered = await request(`/api/workout-sessions/${session.id}/exercises/order`, {
+    method: 'PUT', headers: { cookie },
+    body: JSON.stringify({ exerciseIds, version: session.version }),
+  });
+  assert.equal(reordered.status, 200);
+  const reorderedSession = (await reordered.json()).workoutSession;
+  assert.deepEqual(reorderedSession.exercises.map((exercise) => exercise.id), exerciseIds);
+  assert.equal(reorderedSession.version, session.version + 1);
+
+  const replayed = await request(`/api/workout-sessions/${session.id}/exercises/order`, {
+    method: 'PUT', headers: { cookie },
+    body: JSON.stringify({ exerciseIds, version: session.version }),
+  });
+  assert.equal(replayed.status, 200);
+  assert.deepEqual((await replayed.json()).workoutSession.exercises.map((exercise) => exercise.id), exerciseIds);
 });
 
 test('Abandoning an In-progress Session releases its editing lease', async () => {

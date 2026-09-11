@@ -13,7 +13,7 @@ export const workoutSessionSelect = {
   version: true,
   editingDeviceId: true,
   exercises: {
-    orderBy: { createdAt: "asc" as const },
+    orderBy: [{ position: "asc" as const }, { createdAt: "asc" as const }],
     select: {
       id: true,
       exerciseId: true,
@@ -23,6 +23,7 @@ export const workoutSessionSelect = {
       setCount: true,
       targetValue: true,
       weightGrams: true,
+      position: true,
       source: true,
       removedAt: true,
       setResults: {
@@ -43,7 +44,7 @@ export const workoutSessionHistorySelect = {
   workoutPlanName: true,
   workoutDayName: true,
   exercises: {
-    orderBy: { createdAt: "asc" as const },
+    orderBy: [{ position: "asc" as const }, { createdAt: "asc" as const }],
     select: {
       ...workoutSessionSelect.exercises.select,
       exercise: { select: { name: true } },

@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { AuthShell } from "./auth-shell";
 import { WorkoutWorkspace } from "./workout-workspace";
 
-type User = { name: string; email: string; emailVerified: boolean };
+type User = { id: string; name: string; email: string; emailVerified: boolean };
 type AuthMode = "sign-in" | "sign-up" | "forgot-password";
 
 async function errorMessage(response: Response) {

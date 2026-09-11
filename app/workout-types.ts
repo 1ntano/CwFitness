@@ -51,6 +51,7 @@ export type SessionExercise = {
   setCount: number;
   targetValue: number;
   weightGrams: number | null;
+  position: number;
   source: "PLANNED" | "ADDED";
   removedAt: string | null;
   setResults: SetResult[];

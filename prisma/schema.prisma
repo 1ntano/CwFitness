@@ -203,6 +203,7 @@ model SessionExercise {
   setCount         Int
   targetValue      Int
   weightGrams      Int?
+  position         Int                   @default(0)
   source           SessionExerciseSource @default(PLANNED)
   removedAt        DateTime?
   createdAt        DateTime              @default(now())

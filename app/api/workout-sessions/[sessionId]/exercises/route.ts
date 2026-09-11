@@ -19,8 +19,16 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   if (workoutSession.editingDeviceId !== session.session.id) {
     return sessionUnavailable(workoutSession, "SESSION_TAKEN_OVER", "Workout Session is being edited on another device");
   }
-  if (workoutSession.version !== version) return versionConflict(workoutSession, "Workout Session changed on another device");
   const exerciseId = typeof body?.exerciseId === "string" ? body.exerciseId : "";
+  const clientId = typeof body?.clientId === "string" && body.clientId.length >= 8 && body.clientId.length <= 100 ? body.clientId : null;
+  if (clientId) {
+    const existing = await prisma.sessionExercise.findFirst({
+      where: { id: clientId, workoutSessionId: sessionId },
+      select: { id: true, exerciseId: true, exerciseName: true, resistanceType: true, targetType: true, setCount: true, targetValue: true, weightGrams: true, source: true, position: true },
+    });
+    if (existing) return Response.json({ sessionExercise: existing, workoutSessionVersion: workoutSession.version });
+  }
+  if (workoutSession.version !== version) return versionConflict(workoutSession, "Workout Session changed on another device");
   const setCount = body?.setCount;
   const targetValue = body?.targetValue;
   if (!exerciseId || !Number.isInteger(setCount) || Number(setCount) < 1 || !Number.isInteger(targetValue) || Number(targetValue) < 1) return Response.json({ error: "Complete targets are required" }, { status: 400 });
@@ -38,8 +46,20 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
     });
     if (lease.count === 0) return null;
     return tx.sessionExercise.create({
-      data: { workoutSessionId: sessionId, exerciseId, exerciseName: exercise.name, resistanceType: exercise.resistanceType, targetType: exercise.targetType, setCount: Number(setCount), targetValue: Number(targetValue), weightGrams, source: "ADDED" },
-      select: { id: true, exerciseId: true, exerciseName: true, resistanceType: true, targetType: true, setCount: true, targetValue: true, weightGrams: true, source: true },
+      data: {
+        ...(clientId ? { id: clientId } : {}),
+        workoutSessionId: sessionId,
+        exerciseId,
+        exerciseName: exercise.name,
+        resistanceType: exercise.resistanceType,
+        targetType: exercise.targetType,
+        setCount: Number(setCount),
+        targetValue: Number(targetValue),
+        weightGrams,
+        position: await tx.sessionExercise.count({ where: { workoutSessionId: sessionId } }),
+        source: "ADDED",
+      },
+      select: { id: true, exerciseId: true, exerciseName: true, resistanceType: true, targetType: true, setCount: true, targetValue: true, weightGrams: true, source: true, position: true },
     });
   });
   if (!sessionExercise) {
@@ -47,7 +67,9 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
       where: { id: sessionId },
       select: { id: true, status: true, version: true, editingDeviceId: true },
     });
-    return sessionUnavailable(latest, "SESSION_TAKEN_OVER", "Workout Session is being edited on another device");
+    return latest.editingDeviceId !== session.session.id
+      ? sessionUnavailable(latest, "SESSION_TAKEN_OVER", "Workout Session is being edited on another device")
+      : versionConflict(latest, "Workout Session changed on another device");
   }
-  return Response.json({ sessionExercise }, { status: 201 });
+  return Response.json({ sessionExercise, workoutSessionVersion: version + 1 }, { status: 201 });
 }

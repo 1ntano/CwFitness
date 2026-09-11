@@ -6,11 +6,21 @@ import { PlanEditor, type PlannedExerciseInput } from "./plan-editor";
 import { TrainingPanel } from "./training-panel";
 import { WorkoutHistory } from "./workout-history";
 import { SettingsPanel } from "./settings-panel";
-import { enqueueSet, queuedSets, removeQueuedSet } from "./workout-outbox";
+import {
+  applySessionMutation,
+  clearWorkoutSessionDraft,
+  enqueueSessionMutation,
+  loadWorkoutSessionDraft,
+  queuedSessionMutations,
+  replaySessionMutations,
+  saveWorkoutSessionDraft,
+  type NewSessionMutation,
+} from "./workout-outbox";
+import { weightInGrams } from "../lib/weights";
 import type { Exercise, ExerciseProgress, Plan, PlannedExercise, WorkoutDay, WorkoutHistorySession, WorkoutSession, WorkspaceView } from "./workout-types";
 
 type WorkoutWorkspaceProps = {
-  user: { name: string; email: string };
+  user: { id: string; name: string; email: string };
   deviceId: string;
   onSignOut: () => Promise<void>;
   onAccountDeleted: () => void;
@@ -62,8 +72,45 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const [conflict, setConflict] = useState<ApiError | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [pendingSync, setPendingSync] = useState(0);
+  const [syncError, setSyncError] = useState("");
+
+  const restoreDraft = useCallback(async () => {
+    const draft = await loadWorkoutSessionDraft(user.id);
+    if (!draft) return false;
+    setSession(draft.session);
+    setExercises(draft.exercises);
+    setSettings(draft.settings);
+    setView("training");
+    setOffline(true);
+    setPendingSync((await queuedSessionMutations(user.id)).length);
+    return true;
+  }, [user.id]);
+
+  const syncPendingMutations = useCallback(async () => {
+    return replaySessionMutations(user.id, (mutation) => apiRequest(mutation.request.path, {
+      method: mutation.request.method,
+      body: mutation.request.body,
+    }));
+  }, [user.id]);
 
   const loadData = useCallback(async () => {
+    const pending = await queuedSessionMutations(user.id);
+    setPendingSync(pending.length);
+    if (!navigator.onLine) {
+      if (!(await restoreDraft())) throw new Error("当前离线，且没有可恢复的训练草稿。");
+      return;
+    }
+    if (pending.length > 0) {
+      const replay = await syncPendingMutations();
+      if (!replay.ok) {
+        await restoreDraft();
+        setSyncError(errorText(replay.error));
+        return;
+      }
+    }
+
     const [plansBody, exercisesBody, sessionBody, historyBody, settingsBody] = await Promise.all([
       apiRequest<{ plans: Plan[] }>("/api/plans", { cache: "no-store" }),
       apiRequest<{ exercises: Exercise[] }>("/api/exercises", { cache: "no-store" }),
@@ -76,11 +123,23 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
     setSession(sessionBody.workoutSession);
     setWorkoutSessions(historyBody.workoutSessions);
     setSettings(settingsBody.settings);
+    setOffline(false);
+    setSyncError("");
+    setPendingSync(0);
     setConflict(null);
+    if (sessionBody.workoutSession) {
+      await saveWorkoutSessionDraft(user.id, {
+        session: sessionBody.workoutSession,
+        exercises: exercisesBody.exercises,
+        settings: settingsBody.settings,
+      });
+    } else {
+      await clearWorkoutSessionDraft(user.id);
+    }
     setSelectedPlanId((current) => current || plansBody.plans[0]?.id || "");
     const progressBodies = await Promise.all(plansBody.plans.map((plan) => apiRequest<{ progress: ExerciseProgress[] }>(`/api/plans/${plan.id}/progress`, { cache: "no-store" })));
     setProgress(progressBodies.flatMap((body) => body.progress));
-  }, []);
+  }, [restoreDraft, syncPendingMutations, user.id]);
 
   useEffect(() => {
     let active = true;
@@ -115,15 +174,9 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
   }, [loadData, session]);
 
   useEffect(() => {
-    const flush = async () => {
-      for (const item of await queuedSets()) {
-        try { await apiRequest(item.path, { method: "PUT", body: item.body }); await removeQueuedSet(item.id); } catch { break; }
-      }
-      await loadData();
-    };
-    window.addEventListener("online", flush);
-    if (navigator.onLine) void flush();
-    return () => window.removeEventListener("online", flush);
+    const reconnect = () => { void loadData(); };
+    window.addEventListener("online", reconnect);
+    return () => window.removeEventListener("online", reconnect);
   }, [loadData]);
 
   async function runMutation<T>(action: () => Promise<T>, successMessage: string) {
@@ -141,6 +194,39 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
       }
       setNotice(errorText(error));
       return undefined;
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function mutateSession(mutation: NewSessionMutation, successMessage: string) {
+    if (!session) return;
+    setBusy(true);
+    setNotice("已保存在本机，等待同步。");
+    setSyncError("");
+    try {
+      const nextSession = applySessionMutation(session, mutation);
+      setSession(nextSession);
+      await saveWorkoutSessionDraft(user.id, { session: nextSession, exercises, settings });
+      await enqueueSessionMutation(user.id, mutation);
+      setPendingSync((current) => current + 1);
+
+      if (navigator.onLine) {
+        const replay = await syncPendingMutations();
+        if (replay.ok) {
+          await loadData();
+          setNotice(successMessage);
+        } else {
+          setPendingSync(replay.remaining.length);
+          setSyncError(errorText(replay.error));
+          if (replay.error instanceof ApiError && (replay.error.code === "VERSION_CONFLICT" || replay.error.code === "SESSION_TAKEN_OVER")) {
+            setConflict(replay.error);
+          }
+          setNotice("同步没有完成，已保留本地记录。修复连接或冲突后可重试。");
+        }
+      }
+    } catch (error) {
+      setNotice(errorText(error));
     } finally {
       setBusy(false);
     }
@@ -286,6 +372,17 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
 
   async function recordSet(exercise: WorkoutSession["exercises"][number], setIndex: number, input: { actualValue: number; actualWeight?: number } | null) {
     if (!session) return;
+    const operationId = crypto.randomUUID();
+    const actualWeightGrams = exercise.resistanceType === "WEIGHTED" && input?.actualWeight !== undefined
+      ? weightInGrams(input.actualWeight, settings.weightUnit)
+      : null;
+    const result = input === null
+      ? { actualValue: null, actualWeightGrams: null, skipped: true }
+      : {
+          actualValue: input.actualValue,
+          actualWeightGrams,
+          skipped: false,
+        };
     const payload = input === null
       ? { skipped: true }
       : {
@@ -295,18 +392,16 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
             : {}),
         };
     const path = `/api/workout-sessions/${session.id}/exercises/${exercise.id}/sets/${setIndex}`;
-    const operationId = crypto.randomUUID();
     const versionedBody = JSON.stringify({ ...payload, operationId, version: session.version });
-    if (!navigator.onLine) {
-      await enqueueSet({ id: operationId, path, body: versionedBody });
-      setNotice(`第 ${setIndex} 组已离线保存，恢复网络后会自动同步。`);
-      return;
-    }
-    await runMutation(
-      () => apiRequest(path, {
-        method: "PUT",
-        body: versionedBody,
-      }),
+    await mutateSession(
+      {
+        kind: "set",
+        operationId,
+        sessionExerciseId: exercise.id,
+        setIndex,
+        result,
+        request: { method: "PUT", path, body: versionedBody },
+      },
       input === null ? `第 ${setIndex} 组已跳过。` : `第 ${setIndex} 组已记录。`,
     );
   }
@@ -317,20 +412,73 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
 
   async function addSessionExercise(input: { exerciseId: string; setCount: number; targetValue: number; weight?: number }) {
     if (!session) return;
-    await runMutation(
-      () => apiRequest(`/api/workout-sessions/${session.id}/exercises`, {
-        method: "POST",
-        body: JSON.stringify({ ...input, ...(input.weight === undefined ? {} : { weightUnit: settings.weightUnit }), version: session.version }),
-      }),
+    const exercise = exercises.find((item) => item.id === input.exerciseId);
+    if (!exercise) return;
+    const clientId = crypto.randomUUID();
+    const weightGrams = exercise.resistanceType === "WEIGHTED"
+      ? weightInGrams(input.weight, settings.weightUnit)
+      : null;
+    await mutateSession(
+      {
+        kind: "add-exercise",
+        operationId: clientId,
+        exercise: {
+          id: clientId,
+          exerciseId: exercise.id,
+          exerciseName: exercise.name,
+          resistanceType: exercise.resistanceType,
+          targetType: exercise.targetType,
+          setCount: input.setCount,
+          targetValue: input.targetValue,
+          weightGrams,
+          position: session.exercises.length,
+          source: "ADDED",
+          removedAt: null,
+          setResults: [],
+        },
+        request: {
+          method: "POST",
+          path: `/api/workout-sessions/${session.id}/exercises`,
+          body: JSON.stringify({ ...input, clientId, ...(input.weight === undefined ? {} : { weightUnit: settings.weightUnit }), version: session.version }),
+        },
+      },
       "动作已追加到本次训练。",
     );
   }
 
   async function removeSessionExercise(exercise: WorkoutSession["exercises"][number]) {
     if (!session || !window.confirm(`从本次训练移除“${exercise.exerciseName}”？已记录的组将不计入完成结果。`)) return;
-    await runMutation(
-      () => apiRequest(`/api/workout-sessions/${session.id}/exercises/${exercise.id}`, { method: "DELETE", body: JSON.stringify({ version: session.version }) }),
+    const operationId = crypto.randomUUID();
+    await mutateSession(
+      {
+        kind: "remove-exercise",
+        operationId,
+        sessionExerciseId: exercise.id,
+        request: {
+          method: "DELETE",
+          path: `/api/workout-sessions/${session.id}/exercises/${exercise.id}`,
+          body: JSON.stringify({ operationId, version: session.version }),
+        },
+      },
       "动作已从本次训练移除。",
+    );
+  }
+
+  async function reorderSessionExercises(exerciseIds: string[]) {
+    if (!session) return;
+    const operationId = crypto.randomUUID();
+    await mutateSession(
+      {
+        kind: "reorder-exercises",
+        operationId,
+        exerciseIds,
+        request: {
+          method: "PUT",
+          path: `/api/workout-sessions/${session.id}/exercises/order`,
+          body: JSON.stringify({ exerciseIds, operationId, version: session.version }),
+        },
+      },
+      "动作顺序已更新。",
     );
   }
 
@@ -356,7 +504,10 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
       () => apiRequest(`/api/workout-sessions/${session.id}/complete`, { method: "POST", body: JSON.stringify({ version: session.version }) }),
       "训练已完成。",
     );
-    if (result !== undefined) setView("history");
+    if (result !== undefined) {
+      await clearWorkoutSessionDraft(user.id);
+      setView("history");
+    }
   }
 
   async function saveSettings(nextSettings: { timeZone: string; weightUnit: "kg" | "lb" }) { await runMutation(() => apiRequest("/api/settings", { method: "PATCH", body: JSON.stringify(nextSettings) }), "设置已保存。"); }
@@ -365,7 +516,10 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
   async function abandonWorkout() {
     if (!session) return;
     const result = await runMutation(() => apiRequest(`/api/workout-sessions/${session.id}/abandon`, { method: "POST", body: JSON.stringify({ version: session.version }) }), "训练已放弃，不计入进展。");
-    if (result !== undefined) setView("today");
+    if (result !== undefined) {
+      await clearWorkoutSessionDraft(user.id);
+      setView("today");
+    }
   }
 
   async function correctHistoricalSet(session: WorkoutHistorySession, exercise: WorkoutSession["exercises"][number], setIndex: number, input: { actualValue: number; actualWeight?: number } | null) {
@@ -402,10 +556,10 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
           </div>
           <nav className="workspace-nav" aria-label="主要导航">
             <button type="button" aria-current={view === "today" ? "page" : undefined} onClick={() => setView("today")}>今日</button>
-            <button type="button" aria-current={view === "plans" ? "page" : undefined} onClick={() => setView("plans")}>计划</button>
-            <button type="button" aria-current={view === "exercises" ? "page" : undefined} onClick={() => setView("exercises")}>动作</button>
-            <button type="button" aria-current={view === "history" ? "page" : undefined} onClick={() => setView("history")}>历史</button>
-            <button type="button" aria-current={view === "settings" ? "page" : undefined} onClick={() => setView("settings")}>设置</button>
+            <button type="button" disabled={offline} aria-current={view === "plans" ? "page" : undefined} onClick={() => setView("plans")}>计划</button>
+            <button type="button" disabled={offline} aria-current={view === "exercises" ? "page" : undefined} onClick={() => setView("exercises")}>动作</button>
+            <button type="button" disabled={offline} aria-current={view === "history" ? "page" : undefined} onClick={() => setView("history")}>历史</button>
+            <button type="button" disabled={offline} aria-current={view === "settings" ? "page" : undefined} onClick={() => setView("settings")}>设置</button>
             {session && <button type="button" aria-current={view === "training" ? "page" : undefined} onClick={() => setView("training")}>训练</button>}
           </nav>
           <div className="workspace-account">
@@ -415,6 +569,13 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
         </header>
 
         {notice && <p className={`workspace-notice ${notice.includes("失败") ? "error" : ""}`} role="status">{notice}</p>}
+        {pendingSync > 0 && <p className="workspace-notice recovery" role="status">{pendingSync} 项训练记录正在等待同步。</p>}
+        {syncError && (
+          <div className="workspace-notice error" role="alert">
+            <span>{syncError}</span>
+            <button className="text-button" type="button" onClick={() => void loadData()}>重试同步</button>
+          </div>
+        )}
         {conflict && (
           <div className="workspace-notice error" role="alert">
             <span>{conflict.message}。请刷新后再编辑。</span>
@@ -511,6 +672,7 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
                   busy={busy}
                   weightUnit={settings.weightUnit}
                   canEdit={canEditSession}
+                  offline={offline}
                   onRecordSet={recordSet}
                   onAddExercise={addSessionExercise}
                   onRemoveExercise={removeSessionExercise}
@@ -519,6 +681,7 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
                   onComplete={completeWorkout}
                   onAbandon={abandonWorkout}
                   onTakeover={takeOverSession}
+                  onReorder={reorderSessionExercises}
                 />
               )}
             </>
