@@ -148,7 +148,7 @@ export function AuthExperience() {
           {mode === "sign-in"
             ? "登录以查看今天的计划，并从上次结束的地方继续。"
             : mode === "sign-up"
-              ? "你的计划和训练记录会安全地归属于这个账户。"
+              ? "你的计划和训练记录只归属于你。"
               : "输入邮箱，我们会发送一次性密码重置链接。"}
         </p>
         {mode === "sign-up" && <label className="field"><span className="field-label">称呼</span><span className="input-wrap"><input name="name" autoComplete="name" placeholder="你的名字" required /></span></label>}
@@ -162,10 +162,10 @@ export function AuthExperience() {
         </label>}
         {message && <p className={`status ${messageTone}`} role={messageTone === "error" ? "alert" : "status"}>{message}</p>}
         {canResendVerification && <button className="text-button" type="button" disabled={busy} onClick={resendVerification}>重新发送验证邮件</button>}
-        <button className="primary-button" type="submit" disabled={busy}>{busy ? "请稍候…" : mode === "sign-in" ? "登录" : mode === "sign-up" ? "创建账户" : "发送重置链接"}</button>
+        <button className="primary-button" type="submit" disabled={busy}>{busy ? "请稍候…" : mode === "sign-in" ? "登录" : mode === "sign-up" ? "注册" : "发送重置链接"}</button>
         <div className="auth-links">
           {mode === "sign-in" && <button className="text-button" type="button" onClick={() => { setMode("forgot-password"); setMessage(""); }}>忘记密码？</button>}
-          <button className="text-button" type="button" onClick={() => { setMode(mode === "sign-in" ? "sign-up" : "sign-in"); setMessage(""); }}>{mode === "sign-in" ? "创建账户" : "返回登录"}</button>
+          <button className="text-button" type="button" onClick={() => { setMode(mode === "sign-in" ? "sign-up" : "sign-in"); setMessage(""); }}>{mode === "sign-in" ? "注册" : "返回登录"}</button>
         </div>
       </form>
     </AuthShell>

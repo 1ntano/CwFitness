@@ -7,11 +7,11 @@ test("a User can sign up, sign out, and sign back in", async ({ page }) => {
   const password = "browser-smoke-password";
 
   await page.goto("/");
-  await page.getByRole("button", { name: "创建账户" }).click();
+  await page.getByRole("button", { name: "注册" }).click();
   await page.getByLabel("称呼").fill("Browser Smoke");
   await page.getByLabel("邮箱").fill(email);
   await page.getByRole("textbox", { name: /密码/ }).fill(password);
-  await page.getByRole("button", { name: "创建账户" }).click();
+  await page.getByRole("button", { name: "注册" }).click();
   await expect(page.getByRole("status")).toContainText("验证邮件已发送");
 
   const message = await waitForLocalEmail({ to: email, kind: "verification" });
