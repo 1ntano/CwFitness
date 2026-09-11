@@ -99,11 +99,25 @@ enum TargetType {
   DURATION
 }
 
+enum MuscleGroup {
+  CHEST
+  BACK
+  LEGS
+  SHOULDERS
+  ARMS
+  CORE
+  FULL_BODY
+  CARDIO
+}
+
 model Exercise {
   id               String            @id @default(cuid())
   name             String
   resistanceType   ResistanceType
   targetType       TargetType
+  muscleGroup      MuscleGroup       @default(FULL_BODY)
+  defaultTargetValue Int             @default(8)
+  defaultWeightGrams Int?
   userId           String
   version          Int               @default(1)
   createdAt        DateTime          @default(now())

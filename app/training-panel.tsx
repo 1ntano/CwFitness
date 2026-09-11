@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { MUSCLE_GROUPS, MUSCLE_GROUP_LABELS } from "../lib/exercise-taxonomy";
 import { weightFromGrams } from "../lib/weights";
 import type { Exercise, SessionExercise, SetResult, WorkoutSession } from "./workout-types";
 
@@ -58,6 +59,9 @@ export function TrainingPanel({ session, exercises: availableExercises, busy, we
   const readOnly = !canEdit;
   const [selectedExerciseId, setSelectedExerciseId] = useState("");
   const selectedExercise = availableExercises.find((exercise) => exercise.id === selectedExerciseId);
+  const availableExerciseGroups = MUSCLE_GROUPS
+    .map((muscleGroup) => ({ muscleGroup, items: availableExercises.filter((exercise) => exercise.muscleGroup === muscleGroup) }))
+    .filter((group) => group.items.length > 0);
 
   function completeSession() {
     if (readOnly || offline) return;
@@ -115,7 +119,7 @@ export function TrainingPanel({ session, exercises: availableExercises, busy, we
           setSelectedExerciseId("");
         }}
       >
-        <label><span>追加动作</span><select name="exerciseId" required value={selectedExerciseId} onChange={(event) => setSelectedExerciseId(event.target.value)} disabled={busy || isPaused || readOnly}><option value="">选择动作</option>{availableExercises.map((exercise) => <option key={exercise.id} value={exercise.id}>{exercise.name}</option>)}</select></label>
+        <label><span>追加动作</span><select name="exerciseId" required value={selectedExerciseId} onChange={(event) => setSelectedExerciseId(event.target.value)} disabled={busy || isPaused || readOnly}><option value="">选择动作</option>{availableExerciseGroups.map(({ muscleGroup, items }) => (<optgroup label={MUSCLE_GROUP_LABELS[muscleGroup]} key={muscleGroup}>{items.map((exercise) => <option key={exercise.id} value={exercise.id}>{exercise.name}</option>)}</optgroup>))}</select></label>
         <label><span>组数</span><input name="setCount" type="number" min={1} defaultValue={3} required disabled={busy || isPaused || readOnly} /></label>
         <label><span>{selectedExercise?.targetType === "DURATION" ? "目标秒数" : "目标次数"}</span><input name="targetValue" type="number" min={1} defaultValue={selectedExercise?.targetType === "DURATION" ? 30 : 8} required disabled={busy || isPaused || readOnly} /></label>
         {selectedExercise?.resistanceType === "WEIGHTED" && <label><span>目标重量（{weightUnit}）</span><input name="weight" type="number" min={0.1} step={0.1} required disabled={busy || isPaused || readOnly} /></label>}

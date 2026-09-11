@@ -1,5 +1,6 @@
 import { getVerifiedSession } from "@/lib/auth";
 import { requestedVersion, versionConflict } from "@/lib/concurrency";
+import { MUSCLE_GROUPS } from "@/lib/exercise-taxonomy";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(request: Request, context: RouteContext<"/api/exercises/[exerciseId]">) {
@@ -39,32 +40,37 @@ export async function PATCH(request: Request, context: RouteContext<"/api/exerci
   const { exerciseId } = await context.params;
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const name = typeof body?.name === "string" ? body.name.trim() : "";
+  const muscleGroup = body?.muscleGroup;
+  const defaultTargetValue = body?.defaultTargetValue === undefined ? undefined : Number(body.defaultTargetValue);
+  const defaultWeightGrams = body?.defaultWeightGrams === undefined || body.defaultWeightGrams === null
+    ? body?.defaultWeightGrams === null ? null : undefined
+    : Number(body.defaultWeightGrams);
   const version = requestedVersion(body?.version);
-  if (!version || !name || name.length > 80) {
+  if (!version || !name || name.length > 80 || !MUSCLE_GROUPS.includes(muscleGroup as (typeof MUSCLE_GROUPS)[number]) || (defaultTargetValue !== undefined && (!Number.isInteger(defaultTargetValue) || defaultTargetValue < 1 || defaultTargetValue > 9999)) || (defaultWeightGrams !== undefined && defaultWeightGrams !== null && (!Number.isInteger(defaultWeightGrams) || defaultWeightGrams < 1 || defaultWeightGrams > 1000000))) {
     return Response.json({ error: "Exercise name must contain 1 to 80 characters" }, { status: 400 });
   }
 
   const existing = await prisma.exercise.findFirst({
     where: { id: exerciseId, userId: session.user.id },
-    select: { id: true, name: true, resistanceType: true, targetType: true, version: true },
+    select: { id: true, name: true, resistanceType: true, targetType: true, muscleGroup: true, defaultTargetValue: true, defaultWeightGrams: true, version: true },
   });
   if (!existing) return Response.json({ error: "Exercise not found" }, { status: 404 });
   if (existing.version !== version) return versionConflict(existing, "Exercise changed on another device");
 
   const result = await prisma.exercise.updateMany({
     where: { id: exerciseId, userId: session.user.id, version },
-    data: { name, version: { increment: 1 } },
+    data: { name, muscleGroup: muscleGroup as (typeof MUSCLE_GROUPS)[number], ...(defaultTargetValue === undefined ? {} : { defaultTargetValue }), ...(defaultWeightGrams === undefined ? {} : { defaultWeightGrams }), version: { increment: 1 } },
   });
   if (result.count === 0) {
     const latest = await prisma.exercise.findUniqueOrThrow({
       where: { id: exerciseId },
-      select: { id: true, name: true, resistanceType: true, targetType: true, version: true },
+      select: { id: true, name: true, resistanceType: true, targetType: true, muscleGroup: true, defaultTargetValue: true, defaultWeightGrams: true, version: true },
     });
     return versionConflict(latest, "Exercise changed on another device");
   }
   const exercise = await prisma.exercise.findUniqueOrThrow({
     where: { id: exerciseId },
-    select: { id: true, name: true, resistanceType: true, targetType: true, version: true },
+    select: { id: true, name: true, resistanceType: true, targetType: true, muscleGroup: true, defaultTargetValue: true, defaultWeightGrams: true, version: true },
   });
   return Response.json({ exercise });
 }
@@ -82,7 +88,7 @@ export async function DELETE(request: Request, context: RouteContext<"/api/exerc
 
   const exercise = await prisma.exercise.findFirst({
     where: { id: exerciseId, userId: session.user.id },
-    select: { id: true, name: true, resistanceType: true, targetType: true, version: true },
+    select: { id: true, name: true, resistanceType: true, targetType: true, muscleGroup: true, defaultTargetValue: true, defaultWeightGrams: true, version: true },
   });
   if (!exercise) return Response.json({ error: "Exercise not found" }, { status: 404 });
   if (exercise.version !== version) return versionConflict(exercise, "Exercise changed on another device");
@@ -116,7 +122,7 @@ export async function DELETE(request: Request, context: RouteContext<"/api/exerc
   if ("missing" in result) {
     const latest = await prisma.exercise.findUnique({
       where: { id: exerciseId },
-      select: { id: true, name: true, resistanceType: true, targetType: true, version: true },
+      select: { id: true, name: true, resistanceType: true, targetType: true, muscleGroup: true, defaultTargetValue: true, defaultWeightGrams: true, version: true },
     });
     return latest
       ? versionConflict(latest, "Exercise changed on another device")
@@ -125,7 +131,7 @@ export async function DELETE(request: Request, context: RouteContext<"/api/exerc
   if (result.deleted === 0) {
     const latest = await prisma.exercise.findUniqueOrThrow({
       where: { id: exerciseId },
-      select: { id: true, name: true, resistanceType: true, targetType: true, version: true },
+      select: { id: true, name: true, resistanceType: true, targetType: true, muscleGroup: true, defaultTargetValue: true, defaultWeightGrams: true, version: true },
     });
     return versionConflict(latest, "Exercise changed on another device");
   }

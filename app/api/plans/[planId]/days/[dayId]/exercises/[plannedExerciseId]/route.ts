@@ -30,9 +30,13 @@ async function plannedExerciseTargets(
 
   let weightGrams: number | null = null;
   if (planned.exercise.resistanceType === "WEIGHTED") {
-    weightGrams = weightInGrams(body?.weight, body?.weightUnit);
-    if (weightGrams === null) {
-      return { error: "Weighted Exercises require a positive kg or lb weight" as const, status: 400 };
+    if (body?.weight !== undefined || body?.weightUnit !== undefined) {
+      weightGrams = weightInGrams(body?.weight, body?.weightUnit);
+      if (weightGrams === null) {
+        return { error: "Weighted Exercises require a positive kg or lb weight" as const, status: 400 };
+      }
+    } else {
+      weightGrams = planned.weightGrams;
     }
   } else if (body?.weight !== undefined || body?.weightUnit !== undefined) {
     return { error: "Bodyweight Exercises cannot prescribe external weight" as const, status: 400 };

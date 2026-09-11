@@ -57,6 +57,7 @@ export function AuthExperience() {
     setMessage("");
     const form = new FormData(event.currentTarget);
     const email = String(form.get("email"));
+    const password = String(form.get("password"));
     setLastEmail(email);
 
     if (mode === "forgot-password") {
@@ -73,13 +74,33 @@ export function AuthExperience() {
       return;
     }
 
+    if (mode === "sign-in") {
+      const devResponse = await fetch("/api/dev-login", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      if (devResponse.ok) {
+        const loaded = await loadSession();
+        setMessageTone("success");
+        setMessage(loaded ? "" : "固定账号登录成功，正在恢复会话…");
+        setBusy(false);
+        return;
+      }
+      if (devResponse.status !== 404) {
+        setMessageTone("error");
+        setMessage(await errorMessage(devResponse));
+        setBusy(false);
+        return;
+      }
+    }
     const response = await fetch(`/api/auth/${mode === "sign-up" ? "sign-up" : "sign-in"}/email`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         ...(mode === "sign-up" ? { name: String(form.get("name")) } : {}),
         email,
-        password: String(form.get("password")),
+        password,
       }),
     });
     if (!response.ok) {

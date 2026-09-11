@@ -1,3 +1,7 @@
+import type { MuscleGroup } from "../lib/exercise-taxonomy";
+
+export type { MuscleGroup } from "../lib/exercise-taxonomy";
+
 export type ResistanceType = "WEIGHTED" | "BODYWEIGHT";
 export type TargetType = "REPETITIONS" | "DURATION";
 
@@ -6,6 +10,9 @@ export type Exercise = {
   name: string;
   resistanceType: ResistanceType;
   targetType: TargetType;
+  muscleGroup: MuscleGroup;
+  defaultTargetValue: number;
+  defaultWeightGrams: number | null;
   version: number;
 };
 
@@ -90,4 +97,4 @@ export type WorkoutHistorySession = Omit<WorkoutSession, "status"> & {
 
 export type ExerciseProgress = { key: string; exerciseId: string; recent: Array<{ date: string; achievementRate: number; excessTargetValue: number; excessWeightGrams: number }>; progressionSuggestion: boolean };
 
-export type WorkspaceView = "today" | "plans" | "exercises" | "training" | "history" | "settings";
+export type WorkspaceView = "today" | "exercises" | "plans" | "training" | "history" | "settings";

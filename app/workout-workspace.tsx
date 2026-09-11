@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ExerciseLibrary, type NewExerciseInput } from "./exercise-library";
-import { PlanEditor, type PlannedExerciseInput } from "./plan-editor";
+import { SavedPlanView } from "./saved-plan-view";
+import type { PlannedExerciseInput } from "./plan-editor";
 import { TrainingPanel } from "./training-panel";
 import { WorkoutHistory } from "./workout-history";
 import { SettingsPanel } from "./settings-panel";
@@ -314,6 +315,7 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
     );
   }
 
+
   async function createExercise(input: NewExerciseInput) {
     await runMutation(
       () => apiRequest("/api/exercises", { method: "POST", body: JSON.stringify(input) }),
@@ -321,10 +323,44 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
     );
   }
 
-  async function renameExercise(exercise: Exercise, name: string) {
+  async function saveExercisesToPlan() {
+    const result = await runMutation(
+      () => apiRequest<{ plan: Pick<Plan, "id" | "name">; added: number; total: number }>("/api/plans/from-exercises", {
+        method: "POST",
+        body: "{}",
+      }),
+      "动作已保存到训练计划。",
+    );
+    if (result) {
+      setSelectedPlanId(result.plan.id);
+      setView("plans");
+    }
+  }
+
+  async function deleteSavedPlan(plan: Plan) {
+    if (!window.confirm(`永久删除“${plan.name}”？该计划关联的训练记录也会一并删除。`)) return;
     await runMutation(
-      () => apiRequest(`/api/exercises/${exercise.id}`, { method: "PATCH", body: JSON.stringify({ name, version: exercise.version }) }),
-      "动作名称已更新。",
+      () => apiRequest(`/api/plans/${plan.id}`, { method: "DELETE", body: JSON.stringify({ version: plan.version }) }),
+      "训练计划已删除。",
+    );
+    if (selectedPlanId === plan.id) setSelectedPlanId("");
+  }
+
+  async function createPresetExercises(names: string[]) {
+    if (names.length === 0) return;
+    await runMutation(
+      () => apiRequest("/api/exercises/presets", { method: "POST", body: JSON.stringify({ names }) }),
+      `已将 ${names.length} 个推荐动作加入动作库。`,
+    );
+  }
+
+  async function updateExercise(exercise: Exercise, name: string, defaultTargetValue: number, defaultWeightGrams: number | null) {
+    await runMutation(
+      () => apiRequest(`/api/exercises/${exercise.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name, muscleGroup: exercise.muscleGroup, defaultTargetValue, defaultWeightGrams, version: exercise.version }),
+      }),
+      "动作信息已更新。",
     );
   }
 
@@ -565,8 +601,8 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
           </div>
           <nav className="workspace-nav" aria-label="主要导航">
             <button type="button" aria-current={view === "today" ? "page" : undefined} onClick={() => setView("today")}>今日</button>
-            <button type="button" disabled={offline} aria-current={view === "plans" ? "page" : undefined} onClick={() => setView("plans")}>计划</button>
             <button type="button" disabled={offline} aria-current={view === "exercises" ? "page" : undefined} onClick={() => setView("exercises")}>动作</button>
+            <button type="button" disabled={offline} aria-current={view === "plans" ? "page" : undefined} onClick={() => setView("plans")}>计划</button>
             <button type="button" disabled={offline} aria-current={view === "history" ? "page" : undefined} onClick={() => setView("history")}>历史</button>
             <button type="button" disabled={offline} aria-current={view === "settings" ? "page" : undefined} onClick={() => setView("settings")}>设置</button>
             {session && <button type="button" aria-current={view === "training" ? "page" : undefined} onClick={() => setView("training")}>训练</button>}
@@ -602,7 +638,7 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
                       <p className="section-kicker">今日训练</p>
                       <h1 id="today-title">{session ? "有一场训练正在进行。" : "从建议训练日开始。"}</h1>
                     </div>
-                    <p>{session ? "目标已经锁定，可以继续记录。" : "也可以进入计划页选择任意训练日。"}</p>
+                    <p>{session ? "目标已经锁定，可以继续记录。" : "保存动作后即可开始建议的训练日。"}</p>
                   </header>
 
                   <div className="today-layout">
@@ -639,25 +675,17 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
                 </section>
               )}
 
+
               {view === "plans" && (
-                <PlanEditor
+                <SavedPlanView
                   plans={plans}
-                  exercises={exercises}
                   selectedPlanId={selectedPlanId}
                   busy={busy}
-                  progress={progress}
                   weightUnit={settings.weightUnit}
-                  onSelectPlan={setSelectedPlanId}
-                  onCreatePlan={createPlan}
-                  onRenamePlan={renamePlan}
-                  onSetArchived={setPlanArchived}
-                  onCreateDay={createDay}
-                  onUpdateDay={updateDay}
-                  onDeleteDay={deleteDay}
-                  onAddPlannedExercise={addPlannedExercise}
-                  onUpdatePlannedExercise={updatePlannedExercise}
-                  onDeletePlannedExercise={deletePlannedExercise}
                   onStartWorkout={startWorkout}
+                  onDeletePlan={deleteSavedPlan}
+                  onUpdateDay={updateDay}
+                  onUpdateExercise={updatePlannedExercise}
                 />
               )}
 
@@ -665,8 +693,11 @@ export function WorkoutWorkspace({ user, deviceId, onSignOut, onAccountDeleted }
                 <ExerciseLibrary
                   exercises={exercises}
                   busy={busy}
+                  weightUnit={settings.weightUnit}
                   onCreate={createExercise}
-                  onRename={renameExercise}
+                  onCreatePresets={createPresetExercises}
+                  onSavePlan={saveExercisesToPlan}
+                  onUpdate={updateExercise}
                   onDelete={deleteExercise}
                 />
               )}

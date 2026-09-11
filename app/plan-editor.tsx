@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { MUSCLE_GROUPS, MUSCLE_GROUP_LABELS } from "../lib/exercise-taxonomy";
 import { weightFromGrams } from "../lib/weights";
 import type { Exercise, ExerciseProgress, Plan, PlannedExercise, WorkoutDay } from "./workout-types";
 
@@ -71,6 +72,9 @@ export function PlanEditor(props: PlanEditorProps) {
     ?? selectedPlan?.workoutDays[0]
     ?? null;
   const progressFor = (planned: PlannedExercise) => progress.find((item) => item.key === [planned.exerciseId, planned.setCount, planned.targetValue, planned.weightGrams].join(":"));
+  const exerciseGroups = MUSCLE_GROUPS
+    .map((muscleGroup) => ({ muscleGroup, items: exercises.filter((exercise) => exercise.muscleGroup === muscleGroup) }))
+    .filter((group) => group.items.length > 0);
 
   async function submitPlan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -246,7 +250,11 @@ export function PlanEditor(props: PlanEditorProps) {
                           <span>动作</span>
                           <select name="exerciseId" required defaultValue="">
                             <option value="" disabled>选择动作</option>
-                            {exercises.map((exercise) => <option value={exercise.id} key={exercise.id}>{exercise.name}</option>)}
+                            {exerciseGroups.map(({ muscleGroup, items }) => (
+                              <optgroup label={MUSCLE_GROUP_LABELS[muscleGroup]} key={muscleGroup}>
+                                {items.map((exercise) => <option value={exercise.id} key={exercise.id}>{exercise.name}</option>)}
+                              </optgroup>
+                            ))}
                           </select>
                         </label>
                         <label>
