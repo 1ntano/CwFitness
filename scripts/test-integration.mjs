@@ -97,6 +97,7 @@ let databaseStarted = false;
 let server;
 
 try {
+  await rm(join(process.cwd(), '.next-test'), { recursive: true, force: true });
   await rm(localEmailOutbox, { force: true });
   await startPrismaDev();
   databaseStarted = true;

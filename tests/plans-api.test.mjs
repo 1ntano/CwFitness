@@ -617,6 +617,39 @@ test('User starts one snapshotted Workout Session and completes its timed lifecy
   assert.equal((await (await request('/api/workout-sessions/active', { headers: { cookie } })).json()).workoutSession, null);
 });
 
+test('Recording a set refreshes an active Workout Session heartbeat', async () => {
+  const cookie = await signUp('HeartbeatRecorder');
+  const plan = await createPlan(cookie, 'Heartbeat Plan');
+  const day = await createWorkoutDay(cookie, plan.id, 'Heartbeat Day');
+  const exercise = await createExercise(cookie, {
+    name: 'Heartbeat Press', resistanceType: 'WEIGHTED', targetType: 'REPETITIONS',
+  });
+  await addPlannedExercise(cookie, plan.id, day.id, {
+    exerciseId: exercise.id, setCount: 2, targetValue: 8, weight: 100, weightUnit: 'kg',
+  });
+  const started = await request('/api/workout-sessions', {
+    method: 'POST', headers: { cookie },
+    body: JSON.stringify({ workoutDayId: day.id, timeZone: 'Asia/Shanghai' }),
+  });
+  assert.equal(started.status, 201);
+  const session = (await started.json()).workoutSession;
+  const sessionExercise = session.exercises[0];
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    await client.query('UPDATE "workout_session" SET "lastHeartbeatAt" = now() - interval \'10 minutes\' WHERE id = $1', [session.id]);
+    const recorded = await request(`/api/workout-sessions/${session.id}/exercises/${sessionExercise.id}/sets/1`, {
+      method: 'PUT', headers: { cookie },
+      body: JSON.stringify({ actualValue: 8, actualWeight: 100, weightUnit: 'kg', version: session.version }),
+    });
+    assert.equal(recorded.status, 200);
+    const refreshed = await client.query('SELECT ("lastHeartbeatAt" > now() - interval \'9 minutes\') AS refreshed FROM "workout_session" WHERE id = $1', [session.id]);
+    assert.equal(refreshed.rows[0].refreshed, true);
+  } finally {
+    await client.end();
+  }
+});
+
 test('User records sets and receives per-Exercise achievement without removed Exercises', async () => {
   const cookie = await signUp('SetRecorder');
   const plan = await createPlan(cookie, 'Scoring Plan');
